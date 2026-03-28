@@ -1,0 +1,13 @@
+target/
+*.log
+logs/
+.idea/
+.vscode/
+*.json
+!pom.xml
+!src/
+!models.json
+effective-pom
+project_status_report.md
+temp/
+src/main/resources/application.yml
