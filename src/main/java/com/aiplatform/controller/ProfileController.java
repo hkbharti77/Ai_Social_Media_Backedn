@@ -54,6 +54,7 @@ public class ProfileController {
                 .orElse(BusinessProfile.builder().user(user).build());
         
         existing.setBusinessName(profile.getBusinessName());
+        existing.setBrandSlug(profile.getBrandSlug());
         existing.setNiche(profile.getNiche());
         existing.setTargetAudience(profile.getTargetAudience());
         existing.setBrandTone(profile.getBrandTone());

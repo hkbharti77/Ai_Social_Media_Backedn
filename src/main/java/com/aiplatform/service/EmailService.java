@@ -61,4 +61,13 @@ public class EmailService {
         String htmlBody = EmailTemplateUtils.getPlanExpiredHtml(user);
         sendHtmlMessage(user.getEmail(), "\u231b System Notice: Your VaniAI Subscription has Expired", htmlBody);
     }
+
+    public void sendVerificationEmail(User user, String token) {
+        String verificationUrl = "http://localhost:8080/api/v1/auth/verify?token=" + token;
+        String text = "Hi " + user.getFullName() + ",\n\n" +
+                "Please verify your email by clicking the link below:\n" +
+                verificationUrl + "\n\n" +
+                "If you didn't create an account, please ignore this email.";
+        sendSimpleMessage(user.getEmail(), "Verify your VaniAI Account", text);
+    }
 }

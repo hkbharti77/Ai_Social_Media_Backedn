@@ -120,8 +120,45 @@ public class PublisherService {
 
         Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, containerBody, Map.class);
         String creationId = (String) containerResponse.get("id");
+        
+        if (creationId == null) {
+            throw new RuntimeException("Failed to create Instagram media container. Response: " + containerResponse);
+        }
 
-        // Step 2: Publish media
+        // Step 2: Poll for "FINISHED" status
+        // Images usually take 5-30 seconds to be ready for publishing
+        boolean isReady = false;
+        int retries = 0;
+        int maxRetries = 10; // 10 * 5 seconds = 50 seconds max wait
+        
+        while (!isReady && retries < maxRetries) {
+            try {
+                Thread.sleep(5000); // Wait 5 seconds
+                retries++;
+                
+                String statusUrl = "https://graph.facebook.com/v19.0/" + creationId + 
+                                  "?fields=status_code&access_token=" + accessToken;
+                Map<String, Object> statusResponse = restTemplate.getForObject(statusUrl, Map.class);
+                String statusCode = (String) statusResponse.get("status_code");
+                
+                logger.info("\ud83d\udcf8 [Instagram] Polling media {} - Status: {} (Attempt {})", creationId, statusCode, retries);
+                
+                if ("FINISHED".equalsIgnoreCase(statusCode)) {
+                    isReady = true;
+                } else if ("ERROR".equalsIgnoreCase(statusCode)) {
+                    throw new RuntimeException("Instagram media processing failed: " + statusResponse.get("status_message"));
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Instagram polling interrupted", e);
+            }
+        }
+
+        if (!isReady) {
+            throw new RuntimeException("Instagram media timed out after " + (maxRetries * 5) + " seconds.");
+        }
+
+        // Step 3: Publish media
         String publishUrl = "https://graph.facebook.com/v19.0/" + igId + "/media_publish";
         MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
         publishBody.add("creation_id", creationId);
@@ -131,8 +168,9 @@ public class PublisherService {
         
         if (publishResponse != null && publishResponse.containsKey("id")) {
             post.setExternalPostId((String) publishResponse.get("id"));
+            logger.info("\u2705 [Instagram] Successfully published post ID: {}", post.getExternalPostId());
         } else {
-            throw new RuntimeException("Failed to publish to Instagram. Response: " + publishResponse);
+            throw new RuntimeException("Failed to finalize Instagram publish. Response: " + publishResponse);
         }
     }
 }

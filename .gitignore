@@ -4,5 +4,5 @@ logs/
 .idea/
 .vscode/
 *.json
-
-
+target/
+*.class

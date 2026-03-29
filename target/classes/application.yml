@@ -15,6 +15,11 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
   mail:
     host: ${SMTP_SERVER:smtp.gmail.com}
     port: ${SMTP_PORT:587}
@@ -42,13 +47,24 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${GEMINI_API_KEY:AIzaSyBdqPd_WEqaWRhCPRkyWSU70ac-vqvdDiU}
+        api-key: ${GEMINI_API_KEY:AIzaSyCirdsJSXLL1dA9UMkbF8AUidS5csJF5ME}
         chat:
           options:
             model: gemini-2.5-flash-image
     imagen:
       image-model: imagen-4.0-generate-001
       api-url: https://generativelanguage.googleapis.com/v1beta
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
 
 mail:
   sender: ${SENDER_EMAIL:ewardmacllum@gmail.com}

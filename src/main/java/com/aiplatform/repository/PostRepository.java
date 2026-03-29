@@ -14,4 +14,5 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> findByUserAndStatus(User user, PostStatus status);
     List<Post> findByUserAndStatusAndSlotType(User user, PostStatus status, String slotType);
     List<Post> findByStatusAndSlotTypeAndCreatedAtAfter(PostStatus status, String slotType, LocalDateTime after);
+    List<Post> findByUserAndStatusAndCreatedAtAfter(User user, PostStatus status, LocalDateTime after);
 }

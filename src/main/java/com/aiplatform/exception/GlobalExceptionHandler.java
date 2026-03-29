@@ -1,14 +1,15 @@
 package com.aiplatform.exception;
 
+import com.aiplatform.dto.StandardErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,53 +18,55 @@ public class GlobalExceptionHandler {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(TokenRefreshException.class)
-    public ResponseEntity<Map<String, Object>> handleTokenRefreshException(TokenRefreshException ex, WebRequest request) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", HttpStatus.FORBIDDEN.value());
-        body.put("timestamp", new Date());
-        body.put("message", ex.getMessage());
-        body.put("description", request.getDescription(false));
-
-        return new ResponseEntity<>(body, HttpStatus.FORBIDDEN);
+    public ResponseEntity<StandardErrorResponse> handleTokenRefreshException(TokenRefreshException ex, WebRequest request) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN, ex.getMessage(), request);
     }
 
     @ExceptionHandler(InsufficientCreditsException.class)
-    public ResponseEntity<Map<String, Object>> handleInsufficientCreditsException(InsufficientCreditsException ex, WebRequest request) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", HttpStatus.PAYMENT_REQUIRED.value());
-        body.put("timestamp", new Date());
-        body.put("message", ex.getMessage());
-        body.put("description", request.getDescription(false));
-
-        return new ResponseEntity<>(body, HttpStatus.PAYMENT_REQUIRED);
+    public ResponseEntity<StandardErrorResponse> handleInsufficientCreditsException(InsufficientCreditsException ex, WebRequest request) {
+        return buildErrorResponse(HttpStatus.PAYMENT_REQUIRED, ex.getMessage(), request);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> globalExceptionHandler(Exception ex, WebRequest request) {
-        Map<String, Object> body = new HashMap<>();
-        
-        String message = ex.getMessage() != null ? ex.getMessage() : "An unexpected error occurred";
+    public ResponseEntity<StandardErrorResponse> globalExceptionHandler(Exception ex, WebRequest request) {
+        String message = ex.getMessage() != null ? ex.getMessage() : "An unexpected service error occurred";
         String causeMessage = (ex.getCause() != null && ex.getCause().getMessage() != null) ? ex.getCause().getMessage() : "none";
 
         // Handle Google AI High Demand (503) specifically
         if (message.contains("high demand") || causeMessage.contains("high demand")) {
-            body.put("status", HttpStatus.TOO_MANY_REQUESTS.value());
-            body.put("timestamp", new Date());
-            body.put("message", "The AI engine is currently experiencing high demand. Please try again in a few seconds.");
-            body.put("description", request.getDescription(false));
-            return new ResponseEntity<>(body, HttpStatus.TOO_MANY_REQUESTS);
+            return buildErrorResponse(HttpStatus.TOO_MANY_REQUESTS, 
+                "The AI engine is currently experiencing high demand. Please try again in a few seconds.", request);
         }
 
-        body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-        body.put("timestamp", new Date());
-        body.put("message", ex.getClass().getName() + ": " + message);
-        body.put("cause", ex.getCause() != null ? ex.getCause().getClass().getName() + ": " + causeMessage : "none");
-        body.put("description", request.getDescription(false));
-
-        logger.error("❌ [GlobalException] {}: {} - Cause: {} - URL: {}", 
-            ex.getClass().getSimpleName(), message, causeMessage, request.getDescription(false));
+        String traceId = UUID.randomUUID().toString();
+        logger.error("❌ [GlobalException] TraceId: {} - {}: {} - Cause: {} - URL: {}", 
+            traceId, ex.getClass().getSimpleName(), message, causeMessage, request.getDescription(false));
         logger.error("Full stack trace: ", ex);
 
-        return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
+        // If it's a known user-facing message (like Quota Exceeded), show it. otherwise generic.
+        String displayMessage = (message.contains("Quota") || message.contains("AI Generation failed")) 
+            ? message 
+            : "Internal server error. Please contact support with Trace ID: " + traceId;
+
+        StandardErrorResponse errorResponse = StandardErrorResponse.builder()
+                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+                .message(displayMessage)
+                .path(((ServletWebRequest)request).getRequest().getRequestURI())
+                .timestamp(LocalDateTime.now())
+                .traceId(traceId)
+                .build();
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private ResponseEntity<StandardErrorResponse> buildErrorResponse(HttpStatus status, String message, WebRequest request) {
+        StandardErrorResponse errorResponse = StandardErrorResponse.builder()
+                .status(status.value())
+                .message(message)
+                .path(((ServletWebRequest)request).getRequest().getRequestURI())
+                .timestamp(LocalDateTime.now())
+                .traceId(UUID.randomUUID().toString())
+                .build();
+        return new ResponseEntity<>(errorResponse, status);
     }
 }

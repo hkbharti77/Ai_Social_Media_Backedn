@@ -22,6 +22,9 @@ public class BusinessProfile {
     @Column(name = "business_name")
     private String businessName;
 
+    @Column(name = "brand_slug", unique = true)
+    private String brandSlug;
+
     private String niche;
     
     @Column(name = "target_audience")

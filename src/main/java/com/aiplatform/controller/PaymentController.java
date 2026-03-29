@@ -6,8 +6,7 @@ import com.aiplatform.service.PaymentService;
 import com.aiplatform.service.SubscriptionService;
 import com.razorpay.RazorpayException;
 import lombok.RequiredArgsConstructor;
-import com.aiplatform.security.UserDetailsImpl;
-import com.aiplatform.repository.UserRepository;
+import com.aiplatform.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,7 +15,6 @@ import com.aiplatform.service.PdfService;
 import com.aiplatform.model.PaymentOrder;
 import com.aiplatform.repository.PaymentOrderRepository;
 import java.util.List;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -28,7 +26,6 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final SubscriptionService subscriptionService;
-    private final UserRepository userRepository;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PdfService pdfService;
 
@@ -36,12 +33,10 @@ public class PaymentController {
     private String razorpayKeyId;
 
     @PostMapping("/create-order")
-    public ResponseEntity<?> createOrder(
-            @AuthenticationPrincipal UserDetailsImpl userDetails,
-            @RequestBody Map<String, Object> request) throws RazorpayException {
+    public ResponseEntity<Map<String, Object>> createOrder(@RequestBody Map<String, Object> request) throws RazorpayException {
         
-        User user = userRepository.findById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found: " + userDetails.getId()));
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         String tierName = (String) request.get("tier");
         SubscriptionTier targetTier = SubscriptionTier.valueOf(tierName.toUpperCase().replace(" ", "_"));
@@ -68,8 +63,7 @@ public class PaymentController {
     }
 
     @PostMapping("/verify-payment")
-    public ResponseEntity<?> verifyPayment(
-            @RequestBody Map<String, String> request) throws RazorpayException {
+    public ResponseEntity<Map<String, String>> verifyPayment(@RequestBody Map<String, String> request) throws RazorpayException {
         
         String orderId = request.get("razorpay_order_id");
         String paymentId = request.get("razorpay_payment_id");
@@ -81,21 +75,22 @@ public class PaymentController {
     }
 
     @GetMapping("/history")
-    public ResponseEntity<List<PaymentOrder>> getPaymentHistory(@AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User user = userRepository.findByEmail(userDetails.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    public ResponseEntity<List<PaymentOrder>> getPaymentHistory() {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         List<PaymentOrder> history = paymentOrderRepository.findByUserOrderByCreatedAtDesc(user);
         return ResponseEntity.ok(history);
     }
 
     @GetMapping("/receipt/{orderId}")
-    public ResponseEntity<byte[]> downloadReceipt(@PathVariable String orderId, @AuthenticationPrincipal UserDetailsImpl userDetails) {
+    public ResponseEntity<byte[]> downloadReceipt(@PathVariable String orderId) {
+        Long userId = SecurityUtils.getCurrentUserId();
         PaymentOrder order = paymentOrderRepository.findByRazorpayOrderId(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
         
         // Ensure user only downloads their own receipt
-        if (!order.getUser().getEmail().equals(userDetails.getEmail())) {
+        if (!order.getUser().getId().equals(userId)) {
             return ResponseEntity.status(403).build();
         }
 

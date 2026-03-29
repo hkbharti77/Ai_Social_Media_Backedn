@@ -62,4 +62,18 @@ public class User {
 
     @Column(name = "subscription_expires_at")
     private LocalDateTime subscriptionExpiresAt;
+
+    @Builder.Default
+    @Column(name = "failed_login_attempts", nullable = false)
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "lock_time")
+    private LocalDateTime lockTime;
+
+    @Builder.Default
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = true; // Set to true for existing users
+
+    @Column(name = "verification_token")
+    private String verificationToken;
 }

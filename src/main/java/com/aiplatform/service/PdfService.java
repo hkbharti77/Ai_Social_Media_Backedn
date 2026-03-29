@@ -1,6 +1,7 @@
 package com.aiplatform.service;
 
 import com.aiplatform.model.PaymentOrder;
+import com.aiplatform.model.User;
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
@@ -18,6 +19,112 @@ public class PdfService {
     private final Color PRIMARY_PURPLE = Color.decode("#7c3aed");
     private final Color TEXT_DARK = Color.decode("#1e293b");
     private final Color TEXT_MUTED = Color.decode("#64748b");
+
+    public byte[] generateRoiReport(User user, int postsCount, long hoursSaved, double reachGrowth, String topPostCaption) {
+        Document document = new Document(PageSize.A4, 40, 40, 40, 40);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        try {
+            PdfWriter.getInstance(document, out);
+            document.open();
+
+            // Fonts
+            Font headerFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 22, PRIMARY_PURPLE);
+            Font subHeaderFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, TEXT_DARK);
+            Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 11, TEXT_DARK);
+            Font mutedFont = FontFactory.getFont(FontFactory.HELVETICA, 10, TEXT_MUTED);
+
+            // 1. Title
+            Paragraph title = new Paragraph("Social Media ROI Report", headerFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            document.add(title);
+            
+            Paragraph subtitle = new Paragraph("Prepared for: " + user.getFullName(), mutedFont);
+            subtitle.setAlignment(Element.ALIGN_CENTER);
+            subtitle.setSpacingAfter(30);
+            document.add(subtitle);
+
+            // 2. Metrics Grid (Summary)
+            PdfPTable statsTable = new PdfPTable(3);
+            statsTable.setWidthPercentage(100);
+            statsTable.setSpacingBefore(20);
+            statsTable.setSpacingAfter(20);
+
+            addStatCell(statsTable, "Posts Published", String.valueOf(postsCount), "Total this month");
+            addStatCell(statsTable, "Time Saved", hoursSaved + " hrs", "AI Automation Effect");
+            addStatCell(statsTable, "Reach Growth", String.format("%.1f%%", reachGrowth), "Vs last month");
+
+            document.add(statsTable);
+
+            // 3. Value Breakdown
+            document.add(new Paragraph("Efficiency Analysis", subHeaderFont));
+            document.add(new Paragraph("\n"));
+            
+            Paragraph desc = new Paragraph("By using VaniAI Studio, you've automated your content workflow. " +
+                    "Based on industry standards (45 mins per post), you've recovered significant business hours.", normalFont);
+            desc.setSpacingAfter(15);
+            document.add(desc);
+
+            // 4. Top Performing Content
+            if (topPostCaption != null && !topPostCaption.isEmpty()) {
+                document.add(new Paragraph("Top Performing Post", subHeaderFont));
+                PdfPTable topPostTable = new PdfPTable(1);
+                topPostTable.setWidthPercentage(100);
+                topPostTable.setSpacingBefore(10);
+                
+                PdfPCell cell = new PdfPCell(new Phrase("\"" + topPostCaption + "\"", italicFont()));
+                cell.setPadding(15);
+                cell.setBackgroundColor(new Color(248, 250, 252));
+                cell.setBorderColor(new Color(226, 232, 240));
+                topPostTable.addCell(cell);
+                document.add(topPostTable);
+            }
+
+            // 5. Future Recommendation
+            document.add(new Paragraph("\n"));
+            document.add(new Paragraph("AI Recommendation for Next Month", subHeaderFont));
+            document.add(new Paragraph("Your engagement peaks on Tuesdays. We recommend increasing video content by 20% to maximize reach.", normalFont));
+
+            document.add(new Paragraph("\n\n\n"));
+            LineSeparator ls = new LineSeparator();
+            ls.setLineColor(new Color(226, 232, 240));
+            document.add(new Chunk(ls));
+            
+            Paragraph footer = new Paragraph("© 2026 VaniAI Studio - Your Partner in AI Growth", mutedFont);
+            footer.setAlignment(Element.ALIGN_CENTER);
+            document.add(footer);
+
+            document.close();
+        } catch (DocumentException e) {
+            e.printStackTrace();
+        }
+
+        return out.toByteArray();
+    }
+
+    private void addStatCell(PdfPTable table, String label, String value, String subLabel) {
+        PdfPCell cell = new PdfPCell();
+        cell.setBorder(Rectangle.NO_BORDER);
+        cell.setPadding(10);
+        
+        Paragraph pLabel = new Paragraph(label, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, TEXT_MUTED));
+        pLabel.setAlignment(Element.ALIGN_CENTER);
+        cell.addElement(pLabel);
+        
+        Paragraph pValue = new Paragraph(value, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, PRIMARY_PURPLE));
+        pValue.setAlignment(Element.ALIGN_CENTER);
+        cell.addElement(pValue);
+        
+        Paragraph pSub = new Paragraph(subLabel, FontFactory.getFont(FontFactory.HELVETICA, 8, TEXT_MUTED));
+        pSub.setAlignment(Element.ALIGN_CENTER);
+        cell.addElement(pSub);
+        
+        table.addCell(cell);
+    }
+
+    private Font italicFont() {
+        return FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 11, TEXT_DARK);
+    }
 
     public byte[] generatePaymentReceipt(PaymentOrder order) {
         Document document = new Document(PageSize.A4, 40, 40, 40, 40);

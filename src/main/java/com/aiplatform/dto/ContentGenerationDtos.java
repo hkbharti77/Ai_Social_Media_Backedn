@@ -28,4 +28,30 @@ public class ContentGenerationDtos {
     public static class GenerationResponse {
         private List<GeneratedPost> posts;
     }
+    @Data
+    public static class ContentGapRequest {
+        private String businessType;
+        private String city;
+        private String targetAudience;
+    }
+
+    @Data
+    public static class GapAnalysisResult {
+        private String topic;
+        private String whyItWorks;
+        private String sampleCaption;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ContentGapResponse {
+        private List<GapAnalysisResult> ideas;
+    }
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class PerformancePredictionRequest {
+        private String draft;
+    }
 }

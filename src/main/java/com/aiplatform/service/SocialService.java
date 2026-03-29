@@ -145,19 +145,17 @@ public class SocialService {
 
                 if (!igNode.isMissingNode() && !igNode.path("id").asText().isEmpty()) {
                     String igBusinessId = igNode.path("id").asText();
-                    logger.info("Found Instagram Business Account id={} for pageId={}", igBusinessId, pageId);
+                    logger.info("\ud83d\udcf7 [Instagram] Linked IG Business Account found: {}", igBusinessId);
 
                     // Encrypt the same page access token for Instagram
-                    String encryptedIgToken;
-                    try {
-                        encryptedIgToken = encryptionUtils.encrypt(pageAccessToken);
-                    } catch (Exception e) {
-                        throw new RuntimeException("Error encrypting IG access token", e);
-                    }
+                    String encryptedIgToken = encryptionUtils.encrypt(pageAccessToken);
 
                     // Delete any existing IG account to avoid duplicates
                     socialAccountRepository.findByUserAndPlatformAndIgBusinessAccountId(user, "INSTAGRAM", igBusinessId)
-                            .ifPresent(existing -> socialAccountRepository.delete(existing));
+                            .ifPresent(existing -> {
+                                logger.info("\ud83d\udd04 [Instagram] Updating existing IG account entry for id={}", igBusinessId);
+                                socialAccountRepository.delete(existing);
+                            });
 
                     // Fetch IG username and profile picture
                     String igUsername = null;
@@ -169,30 +167,28 @@ public class SocialService {
                         JsonNode igProfileRoot = objectMapper.readTree(igProfileResponse.getBody());
                         igUsername = igProfileRoot.path("username").asText(null);
                         igPictureUrl = igProfileRoot.path("profile_picture_url").asText(null);
-                        logger.info("Fetched IG profile: username={}", igUsername);
                     } catch (Exception e) {
-                        logger.warn("Could not fetch IG profile for igBusinessId={}: {}", igBusinessId, e.getMessage());
+                        logger.warn("\u26a0\ufe0f [Instagram] Optional profile data fetch failed: {}", e.getMessage());
                     }
 
                     SocialAccount igAccount = SocialAccount.builder()
                             .user(user)
                             .platform("INSTAGRAM")
                             .igBusinessAccountId(igBusinessId)
-                            .accountName(igUsername != null ? "@" + igUsername : "IG Business Account")
+                            .accountName(igUsername != null ? "@" + igUsername : "Instagram Business")
                             .profilePictureUrl(igPictureUrl)
                             .encryptedAccessToken(encryptedIgToken)
                             .tokenExpiresAt(LocalDateTime.now().plusSeconds(expiresIn))
                             .build();
 
                     socialAccountRepository.save(igAccount);
-                    logger.info("Saved INSTAGRAM account for igBusinessId={}", igBusinessId);
+                    logger.info("\u2705 [Instagram] Account successfully integrated.");
                 } else {
-                    logger.warn("No Instagram Business Account linked to Facebook Page id={}. " +
-                            "Make sure the IG account is a Business/Creator account connected to the page.", pageId);
+                    logger.warn("\ud83d\udeab [Instagram] No Instagram Business Account linked to FB Page {}. " +
+                            "Verify that your Instagram account is a 'Business' or 'Creator' type and is connected to this Facebook Page in Page Settings.", pageId);
                 }
             } catch (Exception e) {
-                // Log but do not fail — Facebook account was already saved successfully.
-                logger.warn("Could not fetch Instagram Business Account for pageId={}: {}", pageId, e.getMessage());
+                logger.warn("\u274c [Instagram] API connection failed for pageId={}: {}", pageId, e.getMessage());
             }
         }
     }
