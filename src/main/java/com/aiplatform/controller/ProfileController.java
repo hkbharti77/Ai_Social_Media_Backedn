@@ -10,6 +10,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+import java.util.HashMap;
+
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/v1/profile")
@@ -22,11 +25,24 @@ public class ProfileController {
     private UserRepository userRepository;
 
     @GetMapping
-    public ResponseEntity<BusinessProfile> getProfile() {
+    public ResponseEntity<Map<String, Object>> getProfile() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         User user = userRepository.findById(userDetails.getId()).get();
-        return ResponseEntity.ok(businessProfileRepository.findByUser(user)
-                .orElse(new BusinessProfile()));
+        BusinessProfile bp = businessProfileRepository.findByUser(user).orElse(new BusinessProfile());
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("profile", bp);
+        Map<String, Object> subMap = new HashMap<>();
+        subMap.put("tier", user.getSubscriptionTier() != null ? user.getSubscriptionTier() : "FREE");
+        subMap.put("tierOrdinal", user.getSubscriptionTier() != null ? user.getSubscriptionTier().ordinal() : 0);
+        subMap.put("monthlyCredits", user.getMonthlyCredits() != null ? user.getMonthlyCredits() : 0);
+        subMap.put("dailyCreditsUsed", user.getDailyCreditsUsed() != null ? user.getDailyCreditsUsed() : 0);
+        subMap.put("lastGenerationAt", user.getLastGenerationAt() != null ? user.getLastGenerationAt() : "never");
+        subMap.put("expiresAt", user.getSubscriptionExpiresAt());
+        
+        response.put("subscription", subMap);
+        
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping

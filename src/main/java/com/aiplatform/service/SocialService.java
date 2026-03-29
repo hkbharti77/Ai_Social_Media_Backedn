@@ -41,11 +41,11 @@ public class SocialService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public String getFacebookAuthUrl(Long userId) {
+    public String getFacebookAuthUrl(String state) {
         return "https://www.facebook.com/v19.0/dialog/oauth?" +
                 "client_id=" + fbAppId +
                 "&redirect_uri=" + fbRedirectUri +
-                "&state=" + userId +
+                "&state=" + state +
                 "&scope=pages_show_list,pages_manage_posts,instagram_basic,instagram_content_publish,pages_read_engagement";
     }
 
@@ -201,7 +201,14 @@ public class SocialService {
         return socialAccountRepository.findByUser(user);
     }
 
-    public void deleteAccount(Long id) {
-        socialAccountRepository.deleteById(id);
+    public void deleteAccount(Long id, User user) {
+        SocialAccount account = socialAccountRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Social account not found"));
+        
+        if (!account.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("You are not authorized to disconnect this account");
+        }
+        
+        socialAccountRepository.delete(account);
     }
 }

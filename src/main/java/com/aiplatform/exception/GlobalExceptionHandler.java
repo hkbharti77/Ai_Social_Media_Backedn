@@ -27,6 +27,17 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(body, HttpStatus.FORBIDDEN);
     }
 
+    @ExceptionHandler(InsufficientCreditsException.class)
+    public ResponseEntity<Map<String, Object>> handleInsufficientCreditsException(InsufficientCreditsException ex, WebRequest request) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", HttpStatus.PAYMENT_REQUIRED.value());
+        body.put("timestamp", new Date());
+        body.put("message", ex.getMessage());
+        body.put("description", request.getDescription(false));
+
+        return new ResponseEntity<>(body, HttpStatus.PAYMENT_REQUIRED);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> globalExceptionHandler(Exception ex, WebRequest request) {
         Map<String, Object> body = new HashMap<>();

@@ -70,6 +70,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers("/api/v1/auth/**", "/api/auth/**").permitAll()
                                 .requestMatchers("/api/v1/social/callback/**").permitAll()
+                                .requestMatchers("/api/v1/payments/webhook").permitAll()
                                 .requestMatchers("/api/v1/test/**", "/api/test/**").permitAll()
                                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                                 .requestMatchers("/error").permitAll()

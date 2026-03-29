@@ -37,6 +37,9 @@ public class AiContentService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private SubscriptionService subscriptionService;
+
     @Value("${spring.ai.google.genai.api-key}")
     private String apiKey;
 
@@ -67,7 +70,10 @@ public class AiContentService {
             """;
 
 
-    public GeneratedPost generatePost(BusinessProfile bp, String userCmd) {
+    public GeneratedPost generatePost(BusinessProfile bp, String userCmd, Long userId) {
+        // Enforce limits before anything else
+        subscriptionService.checkAndDecrementCredits(userId, "AI Content Generation");
+
         String visualContext = buildVisualContext(bp);
         PromptTemplate pt = new PromptTemplate(CAPTION_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
@@ -107,7 +113,7 @@ public class AiContentService {
             // Production-grade Image Generation using Gemini Imagen 3
             if (generatedPost.getImageSuggestion() != null && !generatedPost.getImageSuggestion().isEmpty()) {
                 try {
-                    String imageUrl = generateAndUploadImage(generatedPost.getImageSuggestion());
+                    String imageUrl = generateAndUploadImage(generatedPost.getImageSuggestion(), userId);
                     generatedPost.setImageUrl(imageUrl);
                 } catch (Exception e) {
                     // Log the full error for debugging
@@ -122,7 +128,7 @@ public class AiContentService {
         }
     }
 
-    private String generateAndUploadImage(String suggestion) throws Exception {
+    private String generateAndUploadImage(String suggestion, Long userId) throws Exception {
         String url = String.format("%s/models/%s:predict?key=%s", apiUrl, imageModel, apiKey);
 
         Map<String, Object> requestBody = Map.of(
@@ -145,7 +151,7 @@ public class AiContentService {
                 // Upload to S3
                 String fileName = "ai_image_" + UUID.randomUUID() + ".png";
                 try (InputStream is = new ByteArrayInputStream(imageBytes)) {
-                    return s3Service.uploadFile(fileName, is);
+                    return s3Service.uploadFile(fileName, is, userId);
                 }
             }
         }

@@ -3,6 +3,7 @@ package com.aiplatform.controller;
 import com.aiplatform.model.SocialAccount;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.UserRepository;
+import com.aiplatform.security.JwtUtils;
 import com.aiplatform.security.UserDetailsImpl;
 import com.aiplatform.service.SocialService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,18 +25,22 @@ public class SocialController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private JwtUtils jwtUtils;
+
     @Value("${app.frontend-url}")
     private String frontendUrl;
 
     @GetMapping("/connect/facebook")
     public ResponseEntity<String> connectFacebook() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return ResponseEntity.ok(socialService.getFacebookAuthUrl(userDetails.getId()));
+        String stateToken = jwtUtils.generateStateToken(userDetails.getId());
+        return ResponseEntity.ok(socialService.getFacebookAuthUrl(stateToken));
     }
 
     @GetMapping("/callback/facebook")
     public void facebookCallback(@RequestParam String code, @RequestParam String state, HttpServletResponse response) throws IOException {
-        Long userId = Long.parseLong(state);
+        Long userId = jwtUtils.getUserIdFromStateToken(state);
         User user = userRepository.findById(userId).get();
         socialService.processFacebookCallback(code, userId, user);
 
@@ -56,7 +61,9 @@ public class SocialController {
 
     @DeleteMapping("/accounts/{id}")
     public ResponseEntity<?> disconnectAccount(@PathVariable Long id) {
-        socialService.deleteAccount(id);
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findById(userDetails.getId()).get();
+        socialService.deleteAccount(id, user);
         return ResponseEntity.ok("Account disconnected successfully");
     }
 }

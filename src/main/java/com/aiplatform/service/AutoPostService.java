@@ -104,7 +104,7 @@ public class AutoPostService {
         logger.info("🤖 [AutoPost] Generating {} draft for user {} (business: {})",
                 slotType, user.getEmail(), bp.getBusinessName());
 
-        GeneratedPost generated = aiContentService.generatePost(bp, command);
+        GeneratedPost generated = aiContentService.generatePost(bp, command, user.getId());
 
         Post post = Post.builder()
                 .user(user)

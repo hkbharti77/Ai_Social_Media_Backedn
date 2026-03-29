@@ -38,7 +38,7 @@ public class AiController {
 
         List<GeneratedPost> posts = new ArrayList<>();
         for (int i = 0; i < request.getCount(); i++) {
-            posts.add(aiContentService.generatePost(bp, request.getCommand()));
+            posts.add(aiContentService.generatePost(bp, request.getCommand(), userDetails.getId()));
         }
 
         return ResponseEntity.ok(new GenerationResponse(posts));

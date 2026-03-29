@@ -38,12 +38,13 @@ public class S3Service {
     }
 
     /**
-     * Lists all files in the social_media folder and returns objects with URL and downloadUrl.
+     * Lists all files for a specific user in the social_media/{userId} folder.
      */
-    public List<Map<String, String>> listAllFiles() {
+    public List<Map<String, String>> listAllFiles(Long userId) {
+        String userPrefix = S3_FOLDER + userId + "/";
         ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
                 .bucket(bucketName)
-                .prefix(S3_FOLDER)
+                .prefix(userPrefix)
                 .build();
 
         ListObjectsV2Response response = s3Client.listObjectsV2(listRequest);
@@ -58,10 +59,11 @@ public class S3Service {
     }
 
     /**
-     * Uploads a MultipartFile to S3 in social_media folder and returns a pre-signed URL.
+     * Uploads a MultipartFile to S3 in social_media/{userId} folder and returns a pre-signed URL.
      */
-    public String uploadFile(MultipartFile file) throws IOException {
-        String key = S3_FOLDER + UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
+    public String uploadFile(MultipartFile file, Long userId) throws IOException {
+        String sanitizedOriginalName = sanitizeFilename(file.getOriginalFilename());
+        String key = S3_FOLDER + userId + "/" + UUID.randomUUID().toString() + "_" + sanitizedOriginalName;
 
         PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
@@ -75,11 +77,11 @@ public class S3Service {
     }
 
     /**
-     * Uploads an InputStream to S3 with a specific filename in social_media folder.
+     * Uploads an InputStream to S3 with a specific filename in social_media/{userId} folder.
      * Returns a pre-signed URL for immediate access.
      */
-    public String uploadFile(String fileName, InputStream inputStream) {
-        String key = S3_FOLDER + fileName;
+    public String uploadFile(String fileName, InputStream inputStream, Long userId) {
+        String key = S3_FOLDER + userId + "/" + fileName;
 
         try {
             byte[] bytes = inputStream.readAllBytes();
@@ -160,5 +162,14 @@ public class S3Service {
                 .build();
 
         s3Client.deleteObject(deleteObjectRequest);
+    }
+
+    /**
+     * Sanitize filenames to prevent path traversal or S3 key manipulation.
+     */
+    private String sanitizeFilename(String filename) {
+        if (filename == null) return "file";
+        // Remove all characters except alphanumeric, dots, dashes, and underscores
+        return filename.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 }

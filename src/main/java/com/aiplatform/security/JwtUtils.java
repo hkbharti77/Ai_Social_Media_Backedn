@@ -64,4 +64,22 @@ public class JwtUtils {
         }
         return false;
     }
+
+    /**
+     * Generate a short-lived signed token for OAuth state to preventing CSRF.
+     */
+    public String generateStateToken(Long userId) {
+        return Jwts.builder()
+                .setSubject(String.valueOf(userId))
+                .setIssuedAt(new Date())
+                .setExpiration(new Date((new Date()).getTime() + 600000)) // 10 minutes
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public Long getUserIdFromStateToken(String token) {
+        String subject = Jwts.parserBuilder().setSigningKey(getSigningKey()).build()
+                .parseClaimsJws(token).getBody().getSubject();
+        return Long.parseLong(subject);
+    }
 }

@@ -28,15 +28,38 @@ public class User {
 
     @Builder.Default
     @Column(name = "is_active")
-    private boolean isActive = true;
+    private Boolean isActive = true;
 
     @Builder.Default
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subscription_tier")
+    private SubscriptionTier subscriptionTier = SubscriptionTier.FREE;
+
+    @Builder.Default
+    @Column(name = "monthly_credits")
+    private Integer monthlyCredits = 10;
+
+    @Builder.Default
+    @Column(name = "daily_credits_used")
+    private Integer dailyCreditsUsed = 0;
+
+    @Column(name = "last_generation_at")
+    private LocalDateTime lastGenerationAt;
+
+    @Builder.Default
+    @Column(name = "last_reset_at")
+    private LocalDateTime lastResetAt = LocalDateTime.now();
+
+    @Builder.Default
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "role")
     private Set<String> roles = new java.util.HashSet<>();
+
+    @Column(name = "subscription_expires_at")
+    private LocalDateTime subscriptionExpiresAt;
 }

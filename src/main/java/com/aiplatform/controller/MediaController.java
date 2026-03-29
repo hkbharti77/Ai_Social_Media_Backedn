@@ -8,6 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.aiplatform.security.UserDetailsImpl;
+import org.springframework.security.core.context.SecurityContextHolder;
+
 import java.util.Map;
 
 @RestController
@@ -29,6 +32,10 @@ public class MediaController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Please select a file to upload"));
             }
 
+            // Get current user
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            Long userId = userDetails.getId();
+
             // Basic type validation
             String contentType = file.getContentType();
             if (contentType == null || (!contentType.startsWith("image/") && !contentType.startsWith("video/"))) {
@@ -36,7 +43,7 @@ public class MediaController {
             }
 
             // Upload to S3
-            String fileUrl = s3Service.uploadFile(file);
+            String fileUrl = s3Service.uploadFile(file, userId);
 
             return ResponseEntity.ok(Map.of(
                 "url", fileUrl,
@@ -79,12 +86,14 @@ public class MediaController {
     }
 
     /**
-     * Endpoint to list all media URLs from S3.
+     * Endpoint to list all media URLs for the current user from S3.
      */
     @GetMapping("/all")
     public ResponseEntity<?> listAllMedia() {
         try {
-            return ResponseEntity.ok(s3Service.listAllFiles());
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            Long userId = userDetails.getId();
+            return ResponseEntity.ok(s3Service.listAllFiles(userId));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "Failed to list media: " + e.getMessage()));
         }
@@ -99,7 +108,18 @@ public class MediaController {
             if (url == null || url.isBlank()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "URL must not be empty"));
             }
+
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            Long userId = userDetails.getId();
+
             String key = s3Service.extractKeyFromUrl(url);
+            
+            // Security check: Ensure the key belongs to the user's folder
+            String userFolderPrefix = "social_media/" + userId + "/";
+            if (!key.startsWith(userFolderPrefix)) {
+                return ResponseEntity.status(403).body(Map.of("error", "You are not authorized to delete this file"));
+            }
+
             s3Service.deleteFile(key);
             return ResponseEntity.ok(Map.of("message", "File deleted successfully", "url", url));
         } catch (Exception e) {

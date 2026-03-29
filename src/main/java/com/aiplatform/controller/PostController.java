@@ -100,8 +100,13 @@ public class PostController {
 
     @PutMapping("/{id}")
     public ResponseEntity<Post> updatePost(@PathVariable Long id, @RequestBody Post postUpdates) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Post existing = postRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
+
+        if (!existing.getUser().getId().equals(userDetails.getId())) {
+             return ResponseEntity.status(404).build(); // Return 404 to hide existence of other users' posts
+        }
 
         existing.setCaption(postUpdates.getCaption());
         existing.setHashtags(postUpdates.getHashtags());
@@ -123,8 +128,13 @@ public class PostController {
      */
     @PutMapping("/{id}/approve")
     public ResponseEntity<Post> approveDraftPost(@PathVariable Long id) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Post post = postRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
+
+        if (!post.getUser().getId().equals(userDetails.getId())) {
+            return ResponseEntity.status(404).build(); // Return 404 for enumeration protection
+        }
 
         if (post.getStatus() != PostStatus.DRAFT) {
             return ResponseEntity.badRequest().build();
@@ -164,14 +174,27 @@ public class PostController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deletePost(@PathVariable Long id) {
-        postRepository.deleteById(id);
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Post post = postRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Post not found"));
+
+        if (!post.getUser().getId().equals(userDetails.getId())) {
+            return ResponseEntity.status(404).build(); 
+        }
+
+        postRepository.delete(post);
         return ResponseEntity.ok("Post deleted successfully");
     }
 
     @PostMapping("/{id}/schedule")
     public ResponseEntity<Post> schedulePost(@PathVariable Long id, @RequestParam String scheduledAt) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Post post = postRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
+
+        if (!post.getUser().getId().equals(userDetails.getId())) {
+            return ResponseEntity.status(404).build();
+        }
         
         post.setScheduledAt(LocalDateTime.parse(scheduledAt));
         post.setStatus(PostStatus.SCHEDULED);
