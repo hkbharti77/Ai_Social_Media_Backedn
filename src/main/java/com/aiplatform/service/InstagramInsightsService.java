@@ -42,17 +42,32 @@ public class InstagramInsightsService {
             throw new RuntimeException("Failed to decrypt access token");
         }
 
-        // Fetch Follower Activity (Lifetime/Daily insights)
-        // Metric: online_followers (This metric is only available for accounts with >100 followers)
-        String url = String.format("https://graph.facebook.com/v21.0/%s/insights?metric=online_followers&period=lifetime&access_token=%s",
-                igAccount.getIgBusinessAccountId(), accessToken);
+        // --- Fetch follower growth insights ---
+        // Uses `follower_count` with period=day — available with instagram_basic permission.
+        // The restricted `online_followers` (lifetime) metric requires App Review approval.
+        String igId = igAccount.getIgBusinessAccountId();
+
+        if (igId == null || igId.isBlank()) {
+            logger.warn("No IG Business Account ID found for user: {}. Returning mock data.", user.getEmail());
+            return mockBestTimeData();
+        }
+
+        String url = String.format(
+            "https://graph.facebook.com/v21.0/%s/insights?metric=follower_count&period=day&access_token=%s",
+            igId, accessToken);
 
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            return objectMapper.readTree(response.getBody());
+            JsonNode root = objectMapper.readTree(response.getBody());
+            // If Facebook returned an error node, fall back gracefully
+            if (root.has("error")) {
+                logger.warn("IG Insights API returned error for user {}: {} — using mock data.",
+                        user.getEmail(), root.path("error").path("message").asText());
+                return mockBestTimeData();
+            }
+            return root;
         } catch (Exception e) {
             logger.error("Failed to fetch IG insights: {}", e.getMessage());
-            // Return a fallback/mock if API fails or followers < 100
             return mockBestTimeData();
         }
     }
