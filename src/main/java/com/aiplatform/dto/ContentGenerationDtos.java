@@ -11,6 +11,7 @@ public class ContentGenerationDtos {
     public static class PostGenerationRequest {
         private String command;
         private int count = 1;
+        private String modelId;
     }
 
     @Data
@@ -20,6 +21,7 @@ public class ContentGenerationDtos {
         private String caption;
         private List<String> hashtags;
         private String imageUrl;
+        private String videoUrl;
         private String imageSuggestion;
     }
 

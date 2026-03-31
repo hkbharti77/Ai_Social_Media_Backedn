@@ -26,12 +26,15 @@ public class AiController {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
-        BusinessProfile bp = businessProfileRepository.findByUser(user)
-                .orElseThrow(() -> new RuntimeException("Business Profile not found. Please create one first."));
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Business Profile not found. Please create one first.");
+        }
+        BusinessProfile bp = profiles.get(0); // Agency Mode: Using first profile by default
 
         List<GeneratedPost> posts = new ArrayList<>();
         for (int i = 0; i < request.getCount(); i++) {
-            posts.add(aiContentService.generatePost(bp, request.getCommand(), user.getId()));
+            posts.add(aiContentService.generatePost(bp, request.getCommand(), user.getId(), request.getModelId()));
         }
 
         return ResponseEntity.ok(new GenerationResponse(posts));
@@ -39,7 +42,16 @@ public class AiController {
 
     @PostMapping("/gap-analysis")
     public ResponseEntity<ContentGapResponse> generateGapAnalysis(@RequestBody ContentGapRequest request) {
-        return ResponseEntity.ok(aiContentService.generateGapAnalysis(request));
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Please create your Business Profile first to run B2B Growth Strategy.");
+        }
+        BusinessProfile bp = profiles.get(0);
+
+        return ResponseEntity.ok(aiContentService.generateGapAnalysis(request, bp));
     }
 
     @PostMapping("/predict-performance")
@@ -47,9 +59,26 @@ public class AiController {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
-        BusinessProfile bp = businessProfileRepository.findByUser(user)
-                .orElseThrow(() -> new RuntimeException("Business Profile not found. Please create one first."));
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Business Profile not found. Please create one first.");
+        }
+        BusinessProfile bp = profiles.get(0);
 
         return ResponseEntity.ok(aiContentService.predictPerformance(request.getDraft(), bp));
+    }
+
+    @GetMapping("/content-strategy")
+    public ResponseEntity<ContentGapResponse> generateContentStrategy() {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Please create your Business Profile first to generate a Content Strategy.");
+        }
+        BusinessProfile bp = profiles.get(0);
+
+        return ResponseEntity.ok(aiContentService.generateContentStrategy(bp));
     }
 }

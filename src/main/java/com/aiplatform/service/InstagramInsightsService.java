@@ -13,10 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+
 
 @Service
 @RequiredArgsConstructor
@@ -31,7 +28,12 @@ public class InstagramInsightsService {
     public JsonNode getBestTimeReport(User user) {
         SocialAccount igAccount = socialAccountRepository.findByUserAndPlatform(user, "INSTAGRAM")
                 .stream().findFirst()
-                .orElseThrow(() -> new RuntimeException("No connected Instagram Business account found"));
+                .orElse(null);
+
+        if (igAccount == null) {
+            logger.warn("No connected Instagram account for user: {}. Returning mock data.", user.getEmail());
+            return mockBestTimeData();
+        }
 
         String accessToken;
         try {

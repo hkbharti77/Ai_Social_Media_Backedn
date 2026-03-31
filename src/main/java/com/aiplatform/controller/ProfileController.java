@@ -24,19 +24,28 @@ public class ProfileController {
     @Autowired
     private UserRepository userRepository;
 
+    @GetMapping("/all")
+    public ResponseEntity<java.util.List<BusinessProfile>> getAllProfiles() {
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findById(userDetails.getId()).get();
+        return ResponseEntity.ok(businessProfileRepository.findAllByUser(user));
+    }
+
     @GetMapping
     public ResponseEntity<Map<String, Object>> getProfile() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         User user = userRepository.findById(userDetails.getId()).get();
-        BusinessProfile bp = businessProfileRepository.findByUser(user).orElse(new BusinessProfile());
+        BusinessProfile bp = businessProfileRepository.findAllByUser(user).stream().findFirst().orElse(new BusinessProfile());
         
         Map<String, Object> response = new HashMap<>();
         response.put("profile", bp);
         Map<String, Object> subMap = new HashMap<>();
         subMap.put("tier", user.getSubscriptionTier() != null ? user.getSubscriptionTier() : "FREE");
         subMap.put("tierOrdinal", user.getSubscriptionTier() != null ? user.getSubscriptionTier().ordinal() : 0);
-        subMap.put("monthlyCredits", user.getMonthlyCredits() != null ? user.getMonthlyCredits() : 0);
-        subMap.put("dailyCreditsUsed", user.getDailyCreditsUsed() != null ? user.getDailyCreditsUsed() : 0);
+        subMap.put("monthlyCredits", user.getMonthlyCredits() != null ? user.getMonthlyCredits() : 0.0);
+        subMap.put("dailyCreditsUsed", user.getDailyCreditsUsed() != null ? user.getDailyCreditsUsed() : 0.0);
+        subMap.put("purchasedModelIds", user.getPurchasedModelIds() != null ? user.getPurchasedModelIds() : new java.util.ArrayList<String>());
+        subMap.put("maxProfiles", 10); // TODO: Move to PricingTier
         subMap.put("lastGenerationAt", user.getLastGenerationAt() != null ? user.getLastGenerationAt() : "never");
         subMap.put("expiresAt", user.getSubscriptionExpiresAt());
         
@@ -50,8 +59,8 @@ public class ProfileController {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         User user = userRepository.findById(userDetails.getId()).get();
         
-        BusinessProfile existing = businessProfileRepository.findByUser(user)
-                .orElse(BusinessProfile.builder().user(user).build());
+        BusinessProfile existing = businessProfileRepository.findAllByUser(user)
+                .stream().findFirst().orElse(BusinessProfile.builder().user(user).build());
         
         existing.setBusinessName(profile.getBusinessName());
         existing.setBrandSlug(profile.getBrandSlug());

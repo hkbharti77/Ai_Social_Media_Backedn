@@ -1,6 +1,7 @@
 package com.aiplatform.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -33,7 +34,11 @@ public class MicrositeLink {
 
     @Column(name = "sort_order")
     @Builder.Default
+    @JsonProperty("orderIndex")
     private int sortOrder = 0;
+
+    @Column
+    private String icon;
 
     @Builder.Default
     private boolean active = true;

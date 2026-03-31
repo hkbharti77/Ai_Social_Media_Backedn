@@ -18,7 +18,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * AutoPostService – Core orchestrator for the IST-based auto draft + scheduling workflow.
@@ -34,6 +33,9 @@ public class AutoPostService {
 
     private static final Logger logger = LoggerFactory.getLogger(AutoPostService.class);
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+
+    /** Model used for auto-generated posts — free tier, cost-efficient for bulk automation */
+    private static final String AUTO_POST_MODEL = "gemini-2.5-flash-image";
 
     @Autowired
     private UserRepository userRepository;
@@ -92,19 +94,19 @@ public class AutoPostService {
         }
 
         // Load business profile
-        Optional<BusinessProfile> bpOpt = businessProfileRepository.findByUser(user);
-        if (bpOpt.isEmpty()) {
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
             logger.warn("⚠️ [AutoPost] No BusinessProfile found for user {} – skipping.", user.getEmail());
             return null;
         }
 
-        BusinessProfile bp = bpOpt.get();
+        BusinessProfile bp = profiles.get(0);
         String command = buildSlotCommand(slotType, bp);
 
         logger.info("🤖 [AutoPost] Generating {} draft for user {} (business: {})",
                 slotType, user.getEmail(), bp.getBusinessName());
 
-        GeneratedPost generated = aiContentService.generatePost(bp, command, user.getId());
+        GeneratedPost generated = aiContentService.generatePost(bp, command, user.getId(), AUTO_POST_MODEL);
 
         Post post = Post.builder()
                 .user(user)

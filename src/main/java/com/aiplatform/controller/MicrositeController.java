@@ -47,6 +47,13 @@ public class MicrositeController {
     }
 
     // --- Public Profile & Tracking ---
+    @GetMapping("/api/v1/microsite/{brandSlug}")
+    @ResponseBody
+    public ResponseEntity<List<MicrositeLink>> getPublicLinks(@PathVariable String brandSlug) {
+        return ResponseEntity.ok(micrositeService.getPublicLinks(brandSlug));
+    }
+
+    // --- Legacy SSR (keep for SEO/Old compatibility) ---
     @GetMapping("/m/{brandSlug}")
     public String renderMicrosite(@PathVariable String brandSlug, Model model) {
         try {

@@ -2,7 +2,7 @@ package com.aiplatform.config;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
-import io.github.bucket4j.distributed.ExpirationAfterWriteStrategy;
+
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import io.github.bucket4j.redis.lettuce.cas.LettuceBasedProxyManager;
 import org.springframework.beans.factory.annotation.Value;

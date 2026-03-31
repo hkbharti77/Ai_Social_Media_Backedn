@@ -2,6 +2,8 @@ package com.aiplatform.service;
 
 import com.aiplatform.exception.InsufficientCreditsException;
 import com.aiplatform.model.CreditUsage;
+
+import com.aiplatform.model.AiModelSelection;
 import com.aiplatform.model.SubscriptionTier;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.CreditUsageRepository;
@@ -11,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 
 @Service
 public class SubscriptionService {
@@ -23,64 +24,69 @@ public class SubscriptionService {
     private CreditUsageRepository creditUsageRepository;
 
     @Transactional
-    public void checkAndDecrementCredits(Long userId, String purpose) {
+    public void checkAndDecrementCredits(Long userId, String modelId, String purpose) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         SubscriptionTier tier = user.getSubscriptionTier();
+        AiModelSelection modelMetadata = AiModelSelection.fromModelId(modelId);
+        
+        // 1. Validation: Model Access (Tier Level OR Individual Purchase)
+        boolean hasAccess = modelMetadata.getRequiredLevel() <= tier.getLevel() || 
+                           user.getPurchasedModelIds().contains(modelId);
+        
+        if (!hasAccess) {
+            throw new InsufficientCreditsException("Your plan (" + tier.name() + ") cannot access " + modelId + 
+                ". Please upgrade or purchase this model individually.");
+        }
+
+        double cost = modelMetadata.getCreditCost();
         LocalDateTime now = LocalDateTime.now();
 
-        // 0. Null-safe initialization for credits
-        if (user.getMonthlyCredits() == null) {
-            user.setMonthlyCredits(tier.getMonthlyLimit());
-        }
-        if (user.getDailyCreditsUsed() == null) {
-            user.setDailyCreditsUsed(0);
-        }
+        // 2. Null-safe initialization
+        if (user.getMonthlyCredits() == null) user.setMonthlyCredits(tier.getMonthlyLimit());
+        if (user.getDailyCreditsUsed() == null) user.setDailyCreditsUsed(0.0);
 
-        // 1. Check Monthly Reset
+        // 3. Monthly Reset
         if (user.getLastResetAt() == null || user.getLastResetAt().getMonth() != now.getMonth()) {
             user.setMonthlyCredits(tier.getMonthlyLimit());
-            user.setDailyCreditsUsed(0);
+            user.setDailyCreditsUsed(0.0);
             user.setLastResetAt(now);
         }
 
-        // 2. Check Daily Reset
+        // 4. Daily Reset
         if (user.getLastGenerationAt() != null && user.getLastGenerationAt().toLocalDate().isBefore(now.toLocalDate())) {
-            user.setDailyCreditsUsed(0);
+            user.setDailyCreditsUsed(0.0);
         }
 
-        // 3. Validation: Monthly Credits
-        if (user.getMonthlyCredits() <= 0) {
-            throw new InsufficientCreditsException("You have exhausted your monthly AI credits. Please upgrade your plan.");
+        // 5. Validation: Balances
+        if (user.getMonthlyCredits() < cost) {
+            throw new InsufficientCreditsException("Insufficient credits (" + user.getMonthlyCredits() + "). Required: " + cost);
         }
 
-        // 4. Validation: Daily Limits
         if (tier.getDailyLimit() > 0 && user.getDailyCreditsUsed() >= tier.getDailyLimit()) {
-            throw new InsufficientCreditsException("Daily limit reached (" + tier.getDailyLimit() + "). Try again tomorrow or upgrade.");
+            throw new InsufficientCreditsException("Daily limit reached (" + tier.getDailyLimit() + ").");
         }
 
-        // 5. Validation: Cooldown / Rate Limit (1/hour for FREE)
+        // 6. Rate Limit (Cooldown)
         if (tier.getCooldownMinutes() > 0 && user.getLastGenerationAt() != null) {
-            long minutesSinceLast = ChronoUnit.MINUTES.between(user.getLastGenerationAt(), now);
+            long minutesSinceLast = java.time.temporal.ChronoUnit.MINUTES.between(user.getLastGenerationAt(), now);
             if (minutesSinceLast < tier.getCooldownMinutes()) {
-                long remaining = tier.getCooldownMinutes() - minutesSinceLast;
-                throw new InsufficientCreditsException("Cooldown active. Please wait " + remaining + " more minutes or upgrade for instant generation.");
+                throw new InsufficientCreditsException("Cooldown active. Wait " + (tier.getCooldownMinutes() - minutesSinceLast) + " min.");
             }
         }
 
-        // 6. Update usage
-        user.setMonthlyCredits(user.getMonthlyCredits() - 1);
-        user.setDailyCreditsUsed(user.getDailyCreditsUsed() + 1);
+        // 7. Deduct & Save
+        user.setMonthlyCredits(user.getMonthlyCredits() - cost);
+        user.setDailyCreditsUsed(user.getDailyCreditsUsed() + cost);
         user.setLastGenerationAt(now);
-        
         userRepository.save(user);
 
-        // 7. Log History
+        // 8. Log History
         creditUsageRepository.save(CreditUsage.builder()
                 .user(user)
-                .amount(-1)
-                .purpose(purpose != null ? purpose : "AI Content Generation")
+                .amount(-cost)
+                .purpose(purpose != null ? purpose : "AI Content Generation (" + modelId + ")")
                 .createdAt(now)
                 .build());
     }
@@ -92,10 +98,9 @@ public class SubscriptionService {
         
         user.setSubscriptionTier(newTier);
         user.setMonthlyCredits(newTier.getMonthlyLimit());
-        user.setDailyCreditsUsed(0);
+        user.setDailyCreditsUsed(0.0);
         user.setLastResetAt(LocalDateTime.now());
         
-        // 1. Set Expiry Date (30 days for all paid tiers)
         if (newTier != SubscriptionTier.FREE) {
             user.setSubscriptionExpiresAt(LocalDateTime.now().plusDays(30));
         } else {

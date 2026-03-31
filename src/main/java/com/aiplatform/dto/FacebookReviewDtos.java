@@ -2,7 +2,7 @@ package com.aiplatform.dto;
 
 import lombok.Builder;
 import lombok.Data;
-import java.util.List;
+
 
 public class FacebookReviewDtos {
     @Data

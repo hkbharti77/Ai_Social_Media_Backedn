@@ -35,7 +35,7 @@ public class FacebookReviewService {
         SocialAccount fbAccount = getFacebookAccount(user);
         String accessToken = decryptToken(fbAccount.getEncryptedAccessToken());
 
-        String url = String.format("https://graph.facebook.com/v21.0/%s/ratings?access_token=%s",
+        String url = String.format("https://graph.facebook.com/v21.0/%s/ratings?fields=id,reviewer,rating,review_text,created_time&access_token=%s",
                 fbAccount.getPageId(), accessToken);
 
         try {
@@ -46,7 +46,7 @@ public class FacebookReviewService {
             List<ReviewData> reviews = new ArrayList<>();
             for (JsonNode node : data) {
                 reviews.add(ReviewData.builder()
-                        .id(node.path("open_graph_story").path("id").asText()) // Using story ID as review ID
+                        .id(node.path("id").asText())
                         .reviewerName(node.path("reviewer").path("name").asText())
                         .rating(node.path("rating").asInt())
                         .reviewText(node.path("review_text").asText())
@@ -61,7 +61,8 @@ public class FacebookReviewService {
     }
 
     public String generateAiReply(User user, String reviewText, int rating) {
-        BusinessProfile bp = businessProfileRepository.findByUser(user)
+        BusinessProfile bp = businessProfileRepository.findAllByUser(user)
+                .stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Business Profile not found"));
         
         return aiContentService.generateReviewReply(bp.getBusinessName(), reviewText, rating);

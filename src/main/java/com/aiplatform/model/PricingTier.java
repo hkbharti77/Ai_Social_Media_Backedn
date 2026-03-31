@@ -28,8 +28,9 @@ public class PricingTier {
     @Column(nullable = false)
     private Long priceAmount; // Price in INR (not paise, we'll convert to paise for RZP)
 
-    private Integer monthlyCredits;
+    private Double monthlyCredits;
     private Integer dailyLimit;
+    private Integer maxProfiles;
 
     @ElementCollection
     @CollectionTable(name = "tier_features", joinColumns = @JoinColumn(name = "tier_id"))

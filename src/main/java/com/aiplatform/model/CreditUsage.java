@@ -21,7 +21,7 @@ public class CreditUsage {
     private User user;
 
     @Column(nullable = false)
-    private Integer amount; // Number of credits used (usually 1)
+    private Double amount; // Number of credits used (usually 1, but can be 0.25)
 
     @Column(nullable = false)
     private String purpose; // e.g., "AI Image Generation", "Caption Draft"

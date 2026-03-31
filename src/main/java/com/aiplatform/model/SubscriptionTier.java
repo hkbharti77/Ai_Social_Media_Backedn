@@ -1,22 +1,31 @@
 package com.aiplatform.model;
 
 public enum SubscriptionTier {
-    FREE(10, 2, 60),          // 10/mo, 2/day, 60 min cooldown
-    STANDARD(100, 20, 0),     // 100/mo, 20/day
-    PRO(1000, -1, 0),         // 1000/mo, no daily max
-    SUPER_PRO(20000, -1, 0);  // 20000/mo, no daily max
+    FREE(10.0, 2.0, 60, 0, "gemini-2.1-flash-lite", "gemini-2.5-flash-image"),
+    STANDARD(100.0, 20.0, 0, 1, "gemini-2.5-flash-lite", "imagen-4-standard"),
+    PRO(1000.0, -1.0, 0, 2, "gemini-1.5-pro", "imagen-4-ultra"),
+    SUPER_PRO(20000.0, -1.0, 0, 3, "gemini-1.5-pro", "gemini-3-pro-image");
 
-    private final int monthlyLimit;
-    private final int dailyLimit;
+    private final Double monthlyLimit;
+    private final Double dailyLimit;
     private final int cooldownMinutes;
+    private final int level;
+    private final String defaultChatModel;
+    private final String defaultImageModel;
 
-    SubscriptionTier(int monthlyLimit, int dailyLimit, int cooldownMinutes) {
+    SubscriptionTier(Double monthlyLimit, Double dailyLimit, int cooldownMinutes, int level, String defaultChatModel, String defaultImageModel) {
         this.monthlyLimit = monthlyLimit;
         this.dailyLimit = dailyLimit;
         this.cooldownMinutes = cooldownMinutes;
+        this.level = level;
+        this.defaultChatModel = defaultChatModel;
+        this.defaultImageModel = defaultImageModel;
     }
 
-    public int getMonthlyLimit() { return monthlyLimit; }
-    public int getDailyLimit() { return dailyLimit; }
+    public Double getMonthlyLimit() { return monthlyLimit; }
+    public Double getDailyLimit() { return dailyLimit; }
     public int getCooldownMinutes() { return cooldownMinutes; }
+    public int getLevel() { return level; }
+    public String getDefaultChatModel() { return defaultChatModel; }
+    public String getDefaultImageModel() { return defaultImageModel; }
 }

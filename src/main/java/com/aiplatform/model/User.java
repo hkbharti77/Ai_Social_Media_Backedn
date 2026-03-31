@@ -41,11 +41,11 @@ public class User {
 
     @Builder.Default
     @Column(name = "monthly_credits")
-    private Integer monthlyCredits = 10;
+    private Double monthlyCredits = 10.0;
 
     @Builder.Default
     @Column(name = "daily_credits_used")
-    private Integer dailyCreditsUsed = 0;
+    private Double dailyCreditsUsed = 0.0;
 
     @Column(name = "last_generation_at")
     private LocalDateTime lastGenerationAt;
@@ -76,4 +76,10 @@ public class User {
 
     @Column(name = "verification_token")
     private String verificationToken;
+
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_purchased_models", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "model_id")
+    private java.util.Set<String> purchasedModelIds = new java.util.HashSet<>();
 }

@@ -10,8 +10,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
@@ -35,8 +41,20 @@ public class SocialService {
     @Value("${fb.app.secret}")
     private String fbAppSecret;
 
+    @Value("${fb.app.access-token}")
+    private String defaultAccessToken;
+
     @Value("${fb.redirect.uri}")
     private String fbRedirectUri;
+
+    @Value("${linkedin.client.id}")
+    private String liClientId;
+
+    @Value("${linkedin.client.secret}")
+    private String liClientSecret;
+
+    @Value("${linkedin.redirect.uri}")
+    private String liRedirectUri;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -49,6 +67,15 @@ public class SocialService {
                 "&scope=pages_show_list,pages_manage_posts,instagram_basic,instagram_content_publish,pages_read_engagement";
     }
 
+    public String getLinkedInAuthUrl(String state) {
+        return "https://www.linkedin.com/oauth/v2/authorization?" +
+                "response_type=code" +
+                "&client_id=" + liClientId +
+                "&redirect_uri=" + liRedirectUri +
+                "&state=" + state +
+                "&scope=openid%20profile%20w_member_social%20email";
+    }
+
     public void processFacebookCallback(String code, Long userId, User user) {
         // ── Step 1: Exchange authorization code for a user access token ─────────
         String tokenUrl = "https://graph.facebook.com/v19.0/oauth/access_token?" +
@@ -57,6 +84,7 @@ public class SocialService {
                 "&client_secret=" + fbAppSecret +
                 "&code=" + code;
 
+        @SuppressWarnings("unchecked")
         Map<String, Object> tokenResponse = restTemplate.getForObject(tokenUrl, Map.class);
         if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
             throw new RuntimeException("Failed to obtain user access token from Facebook.");
@@ -66,6 +94,109 @@ public class SocialService {
 
         logger.info("Successfully obtained Facebook user access token for userId={}", userId);
 
+        fetchAndSaveAccounts(userAccessToken, expiresIn, user);
+    }
+
+    public void processLinkedInCallback(String code, User user) {
+        // Exchange code for access token
+        String tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
+        
+        MultiValueMap<String, String> body = new org.springframework.util.LinkedMultiValueMap<>();
+        body.add("grant_type", "authorization_code");
+        body.add("code", code);
+        body.add("client_id", liClientId);
+        body.add("client_secret", liClientSecret);
+        body.add("redirect_uri", liRedirectUri);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED);
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tokenResponse = restTemplate.postForObject(tokenUrl, request, Map.class);
+        
+        if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
+            throw new RuntimeException("Failed to obtain LinkedIn access token.");
+        }
+        
+        String accessToken = (String) tokenResponse.get("access_token");
+        Integer expiresIn = (Integer) tokenResponse.getOrDefault("expires_in", 5184000);
+
+        // Fetch user profile info using OpenID Connect endpoint
+        try {
+            HttpHeaders infoHeaders = new HttpHeaders();
+            infoHeaders.setBearerAuth(accessToken);
+            HttpEntity<String> infoRequest = new HttpEntity<>(infoHeaders);
+            
+            ResponseEntity<String> infoResponse = restTemplate.exchange(
+                "https://api.linkedin.com/v2/userinfo",
+                org.springframework.http.HttpMethod.GET,
+                infoRequest,
+                String.class
+            );
+            
+            JsonNode profileRoot = objectMapper.readTree(infoResponse.getBody());
+            String urnSub = profileRoot.path("sub").asText();
+            String name = profileRoot.path("name").asText();
+            String picture = profileRoot.path("picture").asText(null);
+            
+            if (urnSub.isEmpty()) {
+                throw new RuntimeException("Failed to retrieve LinkedIn user ID (sub).");
+            }
+            
+            String personUrn = "urn:li:person:" + urnSub;
+            
+            // Encrypt token
+            String encryptedToken = encryptionUtils.encrypt(accessToken);
+            
+            // Delete existing LinkedIn account for this user to avoid duplicates
+            socialAccountRepository.findByUserAndPlatformAndPageId(user, "LINKEDIN", personUrn)
+                .ifPresent(existing -> socialAccountRepository.delete(existing));
+                
+            SocialAccount liAccount = SocialAccount.builder()
+                .user(user)
+                .platform("LINKEDIN")
+                .pageId(personUrn)
+                .accountName(name)
+                .profilePictureUrl(picture)
+                .encryptedAccessToken(encryptedToken)
+                .tokenExpiresAt(LocalDateTime.now().plusSeconds(expiresIn))
+                .build();
+                
+            socialAccountRepository.save(liAccount);
+            logger.info("Saved LINKEDIN account for personUrn={}", personUrn);
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Error processing LinkedIn profile: " + e.getMessage(), e);
+        }
+    }
+
+    public void connectWithUserToken(String userToken, User user) {
+        // First, exchange the potentially short-lived token for a long-lived one
+        Map<String, Object> longLivedTokenResponse = exchangeShortLivedToken(userToken);
+        String longLivedToken = (String) longLivedTokenResponse.get("access_token");
+        Integer expiresIn = (Integer) longLivedTokenResponse.getOrDefault("expires_in", 5184000);
+
+        fetchAndSaveAccounts(longLivedToken, expiresIn, user);
+    }
+
+    private Map<String, Object> exchangeShortLivedToken(String shortLivedToken) {
+        String exchangeUrl = "https://graph.facebook.com/v19.0/oauth/access_token?" +
+                "grant_type=fb_exchange_token" +
+                "&client_id=" + fbAppId +
+                "&client_secret=" + fbAppSecret +
+                "&fb_exchange_token=" + shortLivedToken;
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = restTemplate.getForObject(exchangeUrl, Map.class);
+        if (response == null || !response.containsKey("access_token")) {
+            throw new RuntimeException("Failed to exchange short-lived token for long-lived token.");
+        }
+        return response;
+    }
+
+    private void fetchAndSaveAccounts(String userAccessToken, Integer expiresIn, User user) {
         // ── Step 2: Fetch Facebook Pages linked to this user ────────────────────
         String pagesUrl = "https://graph.facebook.com/v19.0/me/accounts?access_token=" + userAccessToken;
         ResponseEntity<String> pagesResponseEntity = restTemplate.getForEntity(pagesUrl, String.class);
@@ -96,8 +227,7 @@ public class SocialService {
 
             logger.info("Processing Facebook Page '{}' (id={})", pageName, pageId);
 
-            // Encrypt the page access token (NOT the user token — the page token is
-            // what Graph API requires for feed/photo publishing).
+            // Encrypt the page access token
             String encryptedPageToken;
             try {
                 encryptedPageToken = encryptionUtils.encrypt(pageAccessToken);
@@ -191,6 +321,14 @@ public class SocialService {
                 logger.warn("\u274c [Instagram] API connection failed for pageId={}: {}", pageId, e.getMessage());
             }
         }
+    }
+
+
+    public void connectWithConfiguredToken(User user) {
+        if (defaultAccessToken == null || defaultAccessToken.isEmpty()) {
+            throw new RuntimeException("No default access token configured in application.yml");
+        }
+        connectWithUserToken(defaultAccessToken, user);
     }
 
     public List<SocialAccount> getAccountsByUser(User user) {

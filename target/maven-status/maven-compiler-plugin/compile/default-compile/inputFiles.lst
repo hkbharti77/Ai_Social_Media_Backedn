@@ -26,10 +26,13 @@ D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\Dashboa
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\FacebookReviewDtos.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\MediaUploadRequest.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\MicrositeDtos.java
+D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\SocialTokenRequest.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\StandardErrorResponse.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\exception\GlobalExceptionHandler.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\exception\InsufficientCreditsException.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\exception\TokenRefreshException.java
+D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\model\AiModelSelection.java
+D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\model\ApiProtocol.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\model\BusinessProfile.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\model\CreditUsage.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\model\MicrositeLink.java

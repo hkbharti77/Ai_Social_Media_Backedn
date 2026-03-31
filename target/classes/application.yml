@@ -47,12 +47,12 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${GEMINI_API_KEY:AIzaSyCirdsJSXLL1dA9UMkbF8AUidS5csJF5ME}
+        api-key: ${GEMINI_API_KEY:AIzaSyAYmJrmWQxRSMc5oZHNdBWS3Giqg8DqbSE}
         chat:
           options:
-            model: gemini-2.5-flash-image
+            model: gemini-2.5-flash-lite
     imagen:
-      image-model: imagen-4.0-generate-001
+      image-model: gemini-3.1-flash-image-preview
       api-url: https://generativelanguage.googleapis.com/v1beta
 
 management:
@@ -75,23 +75,31 @@ app:
   use-s3: ${USE_S3:true}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   scheduling:
-    # Trigger times (Cron format: "sec min hour day month weekday")
-    morning-draft-cron: "0 35 12 * * ?"      # 6:00 AM IST. Change "0 15 6" for 6:15 AM.
-    evening-draft-cron: "0 0 15 * * ?"     # 3:00 PM IST. Change "0 30 15" for 3:30 PM.
-    morning-auto-cron: "0 39 12 * * ?"       # 8:00 AM IST check for unapproved drafts.
-    evening-auto-cron: "0 0 18 * * ?"      # 6:00 PM IST check for unapproved drafts.
+    # Trigger times (Cron format: "sec min hour day month weekday") — zone: Asia/Kolkata (IST)
+    morning-draft-cron: "0 0 6 * * ?"       # 6:00 AM IST — Generate morning drafts
+    evening-draft-cron: "0 0 15 * * ?"      # 3:00 PM IST — Generate evening drafts
+    morning-auto-cron: "0 0 8 * * ?"        # 8:00 AM IST — Auto-schedule if user hasn't approved (2hr window)
+    evening-auto-cron: "0 0 18 * * ?"       # 6:00 PM IST — Auto-schedule if user hasn't approved (3hr window)
 
-    # Final publication time for auto-scheduled posts (Format: HH:mm)
-    morning-publish-time: "12:39"          # Target publish time (e.g., 09:15)
-    evening-publish-time: "20:00"          # Target publish time (e.g., 20:30)
+    # Final publication time for auto-scheduled posts (Format: HH:mm IST)
+    morning-publish-time: "09:00"           # 9:00 AM IST — Morning post goes live
+    evening-publish-time: "20:00"           # 8:00 PM IST — Evening post goes live
 
 
 fb:
   app:
     id: ${FB_APP_ID:1953515308861699}
     secret: ${FB_APP_SECRET:f42026af9d2a9a5a5c87025ab21c68cb}
+    access-token: ${FB_ACCESS_TOKEN:EAAbwtjoMSQMBRHYkVWoqzRfdWbekXCLoH89AmAzKoLS03IRj3tkwG2MiZCKmGQBiJuiRK3qH8Dce4W1cJxzkwEZCDKJxKjq9qIDnrsvjitsnZBkXC4HmzlRmofaxFxwCJrbgFQK4rYVxztxXqr4NwWMaw4zO8RxaaNVxX1ZCNfjCOU1v86CWB1kScbWRWkCdSUF6ZA8dN3ATDAU5F20HaZC7eFvEQSPW1JX1ymohXsEwrj7cYjA2ovD69D6BdT8DCqmQ9ooQCw4Wu0Q1WODsSOdOrq}
   redirect:
     uri: ${FB_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/facebook}
+
+linkedin:
+  client:
+    id: ${LINKEDIN_CLIENT_ID:86j6w9tvmvqbe6}
+    secret: ${LINKEDIN_CLIENT_SECRET:WPL_AP1.ueKMu9OQt8tKzObi.rcTfgg==}
+  redirect:
+    uri: ${LINKEDIN_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/linkedin}
 
 encryption:
   secret: ${ENCRYPTION_SECRET:abcdefghijklmnop} # Must be 16 chars for AES

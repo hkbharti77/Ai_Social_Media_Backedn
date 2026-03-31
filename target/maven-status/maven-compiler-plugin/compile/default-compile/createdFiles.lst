@@ -32,6 +32,7 @@ com\aiplatform\model\PostStatus.class
 com\aiplatform\controller\MicrositeController.class
 com\aiplatform\repository\MicrositeLinkRepository.class
 com\aiplatform\service\LoginAttemptService.class
+com\aiplatform\model\AiModelSelection.class
 com\aiplatform\dto\MediaUploadRequest.class
 com\aiplatform\scheduler\PostSchedulerTask.class
 com\aiplatform\controller\AuthController.class
@@ -57,6 +58,7 @@ com\aiplatform\dto\AuthDtos$MessageResponse.class
 com\aiplatform\model\Post.class
 com\aiplatform\model\RefreshToken.class
 com\aiplatform\security\JwtAuthenticationFilter.class
+com\aiplatform\model\ApiProtocol.class
 com\aiplatform\dto\ContentGenerationDtos$GenerationResponse.class
 com\aiplatform\dto\AuthDtos$LoginRequest.class
 com\aiplatform\exception\InsufficientCreditsException.class
