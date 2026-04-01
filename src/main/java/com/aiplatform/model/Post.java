@@ -58,6 +58,13 @@ public class Post {
     private String failureReason;
 
     @Builder.Default
+    @Column(name = "is_thread")
+    private Boolean isThread = false;
+
+    @Column(name = "thread_content", columnDefinition = "TEXT")
+    private String threadContent; // Stores a JSON-serialized list of captions for threads
+
+    @Builder.Default
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 }

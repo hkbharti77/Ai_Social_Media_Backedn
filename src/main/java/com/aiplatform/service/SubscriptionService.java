@@ -109,4 +109,31 @@ public class SubscriptionService {
         
         userRepository.save(user);
     }
+
+    @Transactional(readOnly = true)
+    public void checkImageStorageLimit(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        SubscriptionTier tier = user.getSubscriptionTier();
+        int maxImages = tier.getMaxStoredImages();
+
+        if (maxImages != -1) {
+            int currentImages = user.getStoredImagesCount() == null ? 0 : user.getStoredImagesCount();
+            if (currentImages >= maxImages) {
+                throw new com.aiplatform.exception.StorageLimitExceededException(
+                    "Image storage capacity is full (" + maxImages + " images). Please upgrade your plan to create more."
+                );
+            }
+        }
+    }
+
+    @Transactional
+    public void incrementImageStorage(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        int currentImages = user.getStoredImagesCount() == null ? 0 : user.getStoredImagesCount();
+        user.setStoredImagesCount(currentImages + 1);
+        userRepository.save(user);
+    }
 }

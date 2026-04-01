@@ -6,6 +6,8 @@ import com.aiplatform.model.SocialAccount;
 import com.aiplatform.repository.PostRepository;
 import com.aiplatform.repository.SocialAccountRepository;
 import com.aiplatform.security.EncryptionUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,7 @@ public class PublisherService {
     private EncryptionUtils encryptionUtils;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Async
     public void publishPost(Post post) {
@@ -64,6 +67,9 @@ public class PublisherService {
                         published = true;
                     } else if (platform.equals("LINKEDIN")) {
                         publishToLinkedIn(post, account.getPageId(), token);
+                        published = true;
+                    } else if (platform.equals("X")) {
+                        publishToX(post, token);
                         published = true;
                     }
                 }
@@ -117,6 +123,66 @@ public class PublisherService {
         } catch (Exception e) {
             logger.error("Facebook API error while publishing: {}", e.getMessage());
             throw e;
+        }
+    }
+
+    private void publishToX(Post post, String accessToken) {
+        String url = "https://api.twitter.com/2/tweets";
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        try {
+            if (Boolean.TRUE.equals(post.getIsThread()) && post.getThreadContent() != null) {
+                JsonNode threadArray = objectMapper.readTree(post.getThreadContent());
+                String lastTweetId = null;
+
+                for (JsonNode tweetNode : threadArray) {
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("text", tweetNode.asText());
+                    
+                    if (lastTweetId != null) {
+                        body.put("reply", Map.of("in_reply_to_tweet_id", lastTweetId));
+                    }
+
+                    HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> response = restTemplate.postForObject(url, request, Map.class);
+                    
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> data = (Map<String, Object>) response.get("data");
+                    lastTweetId = (String) data.get("id");
+                    
+                    if (post.getExternalPostId() == null) {
+                        post.setExternalPostId(lastTweetId); // Store the ID of the first tweet (hook)
+                    }
+                    
+                    // Small delay between thread tweets to ensure order and avoid rate limits
+                    Thread.sleep(1000);
+                }
+                logger.info("🧵 Successfully published X Thread (id={})", post.getExternalPostId());
+            } else {
+                // Single Tweet
+                Map<String, Object> body = new HashMap<>();
+                String text = post.getCaption();
+                if (post.getHashtags() != null && !post.getHashtags().isEmpty()) {
+                    text += "\n\n" + post.getHashtags();
+                }
+                body.put("text", text);
+
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = restTemplate.postForObject(url, request, Map.class);
+                
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = (Map<String, Object>) response.get("data");
+                post.setExternalPostId((String) data.get("id"));
+                logger.info("🐦 Successfully published single Tweet (id={})", post.getExternalPostId());
+            }
+        } catch (Exception e) {
+            logger.error("❌ X/Twitter API error while publishing: {}", e.getMessage());
+            throw new RuntimeException("X publishing failed: " + e.getMessage(), e);
         }
     }
 

@@ -2,9 +2,9 @@ spring:
   application:
     name: ai-social-media-automation
   datasource:
-    url: jdbc:postgresql://localhost:5432/ai_social_media
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
+    url: jdbc:postgresql://34.129.56.144:5432/ai_social_media
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:tQrBWiB]}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -47,7 +47,7 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${GEMINI_API_KEY:AIzaSyAYmJrmWQxRSMc5oZHNdBWS3Giqg8DqbSE}
+        api-key: ${GEMINI_API_KEY:AQ.Ab8RN6L3HHO4Jlw_QNuc9bFwDKMJ7imzq9Ok2p4KV08qs14Udw}
         chat:
           options:
             model: gemini-2.5-flash-lite
@@ -123,3 +123,10 @@ logging:
   level:
     org.springframework.security: DEBUG
     com.aiplatform: DEBUG
+
+x:
+  client:
+    id: ${X_CLIENT_ID:Y0t0LXJXb0pPSzZqNEVPeDJLT3M6MTpjaQ}
+    secret: ${X_CLIENT_SECRET:j57N0Ne4oU5YRs62rHnhxOAV1c7PehhlhJbaAyao4LTO3AoL-h}
+  redirect:
+    uri: ${X_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/x}

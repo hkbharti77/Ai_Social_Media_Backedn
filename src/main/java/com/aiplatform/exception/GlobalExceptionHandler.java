@@ -27,6 +27,11 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.PAYMENT_REQUIRED, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(StorageLimitExceededException.class)
+    public ResponseEntity<StandardErrorResponse> handleStorageLimitExceededException(StorageLimitExceededException ex, WebRequest request) {
+        return buildErrorResponse(HttpStatus.PAYMENT_REQUIRED, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<StandardErrorResponse> globalExceptionHandler(Exception ex, WebRequest request) {
         String message = ex.getMessage() != null ? ex.getMessage() : "An unexpected service error occurred";

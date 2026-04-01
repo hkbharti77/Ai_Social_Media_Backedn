@@ -81,4 +81,32 @@ public class AiController {
 
         return ResponseEntity.ok(aiContentService.generateContentStrategy(bp));
     }
+
+    @PostMapping("/meme")
+    public ResponseEntity<MemeResponse> generateMeme(@RequestBody MemeRequest request) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Business Profile not found. Please create one first.");
+        }
+        BusinessProfile bp = profiles.get(0);
+
+        return ResponseEntity.ok(aiContentService.generateMeme(bp, request.getModelId(), request.getCommand(), user.getId()));
+    }
+
+    @PostMapping("/viral-opportunity")
+    public ResponseEntity<ViralOpportunityResponse> generateViralOpportunity(@RequestBody ViralOpportunityRequest request) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Business Profile not found. Please create one first.");
+        }
+        BusinessProfile bp = profiles.get(0);
+
+        return ResponseEntity.ok(aiContentService.generateViralOpportunity(bp, request.getNicheTopic(), user.getId()));
+    }
 }

@@ -20,9 +20,16 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import io.lettuce.core.RedisClient;
+import io.lettuce.core.api.StatefulRedisConnection;
+import io.lettuce.core.api.sync.RedisCommands;
 
 @Service
 public class SocialService {
@@ -56,6 +63,18 @@ public class SocialService {
     @Value("${linkedin.redirect.uri}")
     private String liRedirectUri;
 
+    @Value("${x.client.id}")
+    private String xClientId;
+
+    @Value("${x.client.secret}")
+    private String xClientSecret;
+
+    @Value("${x.redirect.uri}")
+    private String xRedirectUri;
+
+    @Autowired
+    private RedisClient redisClient;
+
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -74,6 +93,48 @@ public class SocialService {
                 "&redirect_uri=" + liRedirectUri +
                 "&state=" + state +
                 "&scope=openid%20profile%20w_member_social%20email";
+    }
+
+    public String getXAuthUrl(String state) {
+        // PKCE: 1. Generate code_verifier
+        String codeVerifier = generateCodeVerifier();
+        
+        // 2. Generate code_challenge
+        String codeChallenge = generateCodeChallenge(codeVerifier);
+        
+        // 3. Store code_verifier in Redis linked to state (valid for 10 mins)
+        try (StatefulRedisConnection<String, String> connection = redisClient.connect()) {
+            RedisCommands<String, String> sync = connection.sync();
+            sync.setex("pkce:" + state, 600, codeVerifier);
+        }
+
+        return "https://twitter.com/i/oauth2/authorize?" +
+                "response_type=code" +
+                "&client_id=" + xClientId +
+                "&redirect_uri=" + xRedirectUri +
+                "&state=" + state +
+                "&code_challenge=" + codeChallenge +
+                "&code_challenge_method=S256" +
+                "&scope=tweet.read%20tweet.write%20users.read%20offline.access";
+    }
+
+    private String generateCodeVerifier() {
+        SecureRandom sr = new SecureRandom();
+        byte[] code = new byte[32];
+        sr.nextBytes(code);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(code);
+    }
+
+    private String generateCodeChallenge(String codeVerifier) {
+        try {
+            byte[] bytes = codeVerifier.getBytes();
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(bytes);
+            byte[] digest = md.digest();
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (Exception e) {
+            throw new RuntimeException("Error generating code challenge", e);
+        }
     }
 
     public void processFacebookCallback(String code, Long userId, User user) {
@@ -169,6 +230,101 @@ public class SocialService {
             
         } catch (Exception e) {
             throw new RuntimeException("Error processing LinkedIn profile: " + e.getMessage(), e);
+        }
+    }
+
+    public void processXCallback(String code, String state, User user) {
+        // Retrieve code_verifier from Redis
+        String codeVerifier;
+        try (StatefulRedisConnection<String, String> connection = redisClient.connect()) {
+            RedisCommands<String, String> sync = connection.sync();
+            codeVerifier = sync.get("pkce:" + state);
+        }
+
+        if (codeVerifier == null) {
+            throw new RuntimeException("Invalid state or PKCE verifier expired.");
+        }
+
+        // Exchange code for tokens
+        String tokenUrl = "https://api.twitter.com/2/oauth2/token";
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "authorization_code");
+        body.add("code", code);
+        body.add("redirect_uri", xRedirectUri);
+        body.add("code_verifier", codeVerifier);
+        body.add("client_id", xClientId);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBasicAuth(xClientId, xClientSecret);
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> tokenResponse = restTemplate.postForObject(tokenUrl, request, Map.class);
+            if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
+                throw new RuntimeException("Failed to obtain X access token.");
+            }
+
+            String accessToken = (String) tokenResponse.get("access_token");
+            String refreshToken = (String) tokenResponse.get("refresh_token");
+            Integer expiresIn = (Integer) tokenResponse.getOrDefault("expires_in", 7200);
+
+            // Fetch user info
+            HttpHeaders userInfoHeaders = new HttpHeaders();
+            userInfoHeaders.setBearerAuth(accessToken);
+            HttpEntity<String> userInfoRequest = new HttpEntity<>(userInfoHeaders);
+
+            ResponseEntity<String> userInfoResponse = restTemplate.exchange(
+                    "https://api.twitter.com/2/users/me?user.fields=profile_image_url",
+                    HttpMethod.GET,
+                    userInfoRequest,
+                    String.class
+            );
+
+            JsonNode userRoot = objectMapper.readTree(userInfoResponse.getBody());
+            JsonNode dataNode = userRoot.path("data");
+            String xUserId = dataNode.path("id").asText();
+            String xUsername = dataNode.path("username").asText();
+            String xName = dataNode.path("name").asText();
+            String xProfilePicture = dataNode.path("profile_image_url").asText(null);
+
+            // Encrypt and save
+            String encryptedAccessToken = encryptionUtils.encrypt(accessToken);
+            String encryptedRefreshToken = refreshToken != null ? encryptionUtils.encrypt(refreshToken) : null;
+
+            socialAccountRepository.findByUserAndPlatformAndPageId(user, "X", xUserId)
+                    .ifPresent(existing -> socialAccountRepository.delete(existing));
+
+            SocialAccount xAccount = SocialAccount.builder()
+                    .user(user)
+                    .platform("X")
+                    .pageId(xUserId)
+                    .accountName(xName + " (@" + xUsername + ")")
+                    .profilePictureUrl(xProfilePicture)
+                    .encryptedAccessToken(encryptedAccessToken)
+                    .encryptedRefreshToken(encryptedRefreshToken)
+                    .tokenExpiresAt(LocalDateTime.now().plusSeconds(expiresIn))
+                    .build();
+
+            socialAccountRepository.save(xAccount);
+            logger.info("Saved X account for userId={}", xUserId);
+
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            String errorDetail = e.getResponseBodyAsString();
+            logger.error("❌ X Token Exchange Failed: {} - {}", e.getStatusCode(), errorDetail);
+            try {
+                JsonNode errorNode = objectMapper.readTree(errorDetail);
+                String detail = errorNode.path("detail").asText(errorNode.path("error_description").asText("X API Error: " + e.getStatusText()));
+                throw new RuntimeException(detail);
+            } catch (Exception ex) {
+                throw new RuntimeException("X API Error: " + e.getStatusText() + " (" + errorDetail + ")");
+            }
+        } catch (Exception e) {
+            logger.error("X Callback error", e);
+            throw new RuntimeException("Error processing X callback: " + e.getMessage());
         }
     }
 

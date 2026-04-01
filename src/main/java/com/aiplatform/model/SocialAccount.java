@@ -43,6 +43,9 @@ public class SocialAccount {
     @Column(name = "token_expires_at")
     private LocalDateTime tokenExpiresAt;
 
+    @Column(name = "encrypted_refresh_token", length = 1000)
+    private String encryptedRefreshToken;
+
     @Builder.Default
     @Column(name = "connected_at")
     private LocalDateTime connectedAt = LocalDateTime.now();

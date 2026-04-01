@@ -8,6 +8,7 @@ import com.aiplatform.security.JwtUtils;
 import com.aiplatform.service.SocialService;
 import com.aiplatform.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +19,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/social")
 @RequiredArgsConstructor
+@Slf4j
 public class SocialController {
 
     private final SocialService socialService;
@@ -35,6 +37,26 @@ public class SocialController {
         }
         String stateToken = jwtUtils.generateStateToken(userId);
         return ResponseEntity.ok(socialService.getLinkedInAuthUrl(stateToken));
+    }
+
+    @GetMapping("/connect/x")
+    public ResponseEntity<String> connectX() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            throw new RuntimeException("Authenticated user not found");
+        }
+        String stateToken = jwtUtils.generateStateToken(userId);
+        return ResponseEntity.ok(socialService.getXAuthUrl(stateToken));
+    }
+
+    @GetMapping("/connect/facebook")
+    public ResponseEntity<String> connectFacebook() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            throw new RuntimeException("Authenticated user not found");
+        }
+        String stateToken = jwtUtils.generateStateToken(userId);
+        return ResponseEntity.ok(socialService.getFacebookAuthUrl(stateToken));
     }
 
     @GetMapping("/callback/facebook")
@@ -80,6 +102,36 @@ public class SocialController {
 
         String redirectUrl = frontendUrl + "/connect?success=true&platform=linkedin";
         response.sendRedirect(redirectUrl);
+    }
+
+    @GetMapping("/callback/x")
+    public void xCallback(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String error,
+            @RequestParam(required = false) String error_description,
+            @RequestParam String state,
+            HttpServletResponse response) throws IOException {
+        
+        if (error != null) {
+            String redirectUrl = frontendUrl + "/connect?error=" + java.net.URLEncoder.encode(error_description != null ? error_description : error, "UTF-8");
+            response.sendRedirect(redirectUrl);
+            return;
+        }
+
+        try {
+            Long userId = jwtUtils.getUserIdFromStateToken(state);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("User context lost during callback - Invalid userId: " + userId));
+            
+            socialService.processXCallback(code, state, user);
+
+            String redirectUrl = frontendUrl + "/connect?success=true&platform=x";
+            response.sendRedirect(redirectUrl);
+        } catch (Exception e) {
+            log.error("X Callback handling failed", e);
+            String redirectUrl = frontendUrl + "/connect?error=" + java.net.URLEncoder.encode(e.getMessage(), "UTF-8");
+            response.sendRedirect(redirectUrl);
+        }
     }
 
     @GetMapping("/accounts")

@@ -48,6 +48,8 @@ public class ProfileController {
         subMap.put("maxProfiles", 10); // TODO: Move to PricingTier
         subMap.put("lastGenerationAt", user.getLastGenerationAt() != null ? user.getLastGenerationAt() : "never");
         subMap.put("expiresAt", user.getSubscriptionExpiresAt());
+        subMap.put("storedImagesCount", user.getStoredImagesCount() != null ? user.getStoredImagesCount() : 0);
+        subMap.put("maxStoredImages", user.getSubscriptionTier() != null ? user.getSubscriptionTier().getMaxStoredImages() : 10);
         
         response.put("subscription", subMap);
         

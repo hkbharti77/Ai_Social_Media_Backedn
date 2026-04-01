@@ -82,4 +82,12 @@ public class User {
     @CollectionTable(name = "user_purchased_models", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "model_id")
     private java.util.Set<String> purchasedModelIds = new java.util.HashSet<>();
+
+    @Builder.Default
+    @Column(name = "stored_images_count")
+    private Integer storedImagesCount = 0;
+
+    @Builder.Default
+    @Column(name = "stored_videos_count")
+    private Integer storedVideosCount = 0;
 }

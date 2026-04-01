@@ -23,9 +23,11 @@ import org.springframework.web.client.RestTemplate;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -109,6 +111,50 @@ public class AiContentService {
             Return ONLY the reply text, max 300 chars.
             """;
 
+    private static final String MEME_TEMPLATE = """
+            You are a creative social media memer for {businessName} ({niche}).
+            Create a viral meme concept that highlights {businessName}'s value proposition or pokes fun at a common industry pain point.
+            
+            {commandText}
+            
+            Brand Tone: {tone}
+            
+            Return ONLY a JSON object exactly like this structure:
+            {jsonStructure}
+            """;
+
+    private static final String THREAD_TEMPLATE = """
+            You are a social media growth expert specializing in high-impact threads for {niche} (B2B, Crypto, and News niches).
+            Create a compelling multi-tweet thread (5-7 tweets) for {businessName}.
+            
+            Topic/Command: {command}
+            Target Audience: {audience}
+            Tone: {tone}
+            
+            Guidelines:
+            1. Hook: The first tweet must be a powerful "stop-the-scroll" hook.
+            2. Value: Each subsequent tweet must provide specific value/insight.
+            3. Call to Action: The final tweet must have a clear CTA.
+            4. Formatting: Use bullet points, line breaks, and emojis to make it readable.
+            5. Length: Each tweet MUST be under 280 characters.
+            
+            Return a JSON object exactly like this structure:
+            {jsonStructure}
+            """;
+
+    private static final String VIRAL_OPPORTUNITY_TEMPLATE = """
+            You are a trend-spotting social media growth hacker. 
+            Analyze the current state of the {niche} industry focusing on the topic: {topic}.
+            
+            Identify:
+            1. A 'Trend': What's currently getting high engagement.
+            2. A 'Viral Gap': What everyone is missing/doing wrong.
+            3. A 'Draft Post': A high-impact post that fills this gap.
+            
+            Return ONLY a JSON object exactly like this structure:
+            {jsonStructure}
+            """;
+
 
     public GeneratedPost generatePost(BusinessProfile bp, String userCmd, Long userId, String modelId) {
         // 1. Model Metadata & Defaulting
@@ -179,6 +225,56 @@ public class AiContentService {
         } catch (Exception e) {
             logger.error("❌ Failed to parse GeneratedPost: " + content, e);
             throw new RuntimeException("AI Content processing failed.");
+        }
+    }
+
+    public List<String> generateThread(BusinessProfile bp, String userCmd, Long userId, String modelId) {
+        String finalModelId = (modelId != null && !modelId.isEmpty()) ? modelId : 
+                             SecurityUtils.getCurrentUser().get().getSubscriptionTier().getDefaultImageModel();
+
+        lockService.executeWithLock("credits:" + userId, Duration.ofSeconds(5), Duration.ofSeconds(10), () -> {
+            // Threads cost more credits (e.g., 3x) because they are multiple posts
+            subscriptionService.checkAndDecrementCredits(userId, finalModelId, "AI Thread Generation");
+            return null;
+        });
+
+        PromptTemplate pt = new PromptTemplate(THREAD_TEMPLATE);
+        Prompt prompt = pt.create(Map.of(
+                "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
+                "niche", bp.getNiche() != null ? bp.getNiche() : "B2B/Crypto/News",
+                "tone", bp.getBrandTone() != null ? bp.getBrandTone() : "authoritative",
+                "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "investors and professionals",
+                "command", userCmd,
+                "jsonStructure", "{\"tweets\": [\"Tweet 1 hook...\", \"Tweet 2 logic...\", \"Tweet 3 insight...\", \"Final tweet CTA...\"]}"
+        ));
+
+        logger.info("🧵 Generating AI thread [Model: {}] for user: {}", finalModelId, userId);
+
+        String content;
+        try {
+            content = chatClient.prompt(prompt).call().content();
+        } catch (Exception e) {
+            logger.error("❌ AI Thread Generation failed: {}", e.getMessage());
+            throw new RuntimeException("AI Thread Generation failed.");
+        }
+
+        try {
+            if (content.contains("```json")) {
+                content = content.substring(content.indexOf("```json") + 7, content.lastIndexOf("```"));
+            }
+            
+            JsonNode root = objectMapper.readTree(content);
+            JsonNode tweetsNode = root.path("tweets");
+            List<String> tweets = new ArrayList<>();
+            if (tweetsNode.isArray()) {
+                for (JsonNode tweet : tweetsNode) {
+                    tweets.add(tweet.asText());
+                }
+            }
+            return tweets;
+        } catch (Exception e) {
+            logger.error("❌ Failed to parse Thread: " + content, e);
+            throw new RuntimeException("AI Thread processing failed.");
         }
     }
 
@@ -285,6 +381,8 @@ public class AiContentService {
     }
 
     private String generateAndUploadImage(String suggestion, String userCommand, Long userId, String modelId, BusinessProfile bp) throws Exception {
+        subscriptionService.checkImageStorageLimit(userId);
+        
         AiModelSelection meta = AiModelSelection.fromModelId(modelId);
         String suffix = (meta.getProtocol() == ApiProtocol.GEMINI) ? ":generateContent" : ":predict";
         String url = String.format("%s/models/%s%s?key=%s", apiUrl, meta.getActualApiModelId(), suffix, apiKey);
@@ -406,6 +504,7 @@ public class AiContentService {
                     try (InputStream is = new ByteArrayInputStream(imageBytes)) {
                         String resultUrl = s3Service.uploadFile(fileName, is, userId);
                         logger.info("✅ Image Gen successful: {}", resultUrl);
+                        subscriptionService.incrementImageStorage(userId);
                         return resultUrl;
                     }
                 } else {
@@ -485,9 +584,9 @@ public class AiContentService {
         return cleaned.replaceAll("\\s+", " ").trim();
     }
 
-    private String getColorDescription(java.util.List<String> hexCodes) {
+    private String getColorDescription(List<String> hexCodes) {
         if (hexCodes == null || hexCodes.isEmpty()) return "Natural colors";
-        java.util.List<String> readableColors = new java.util.ArrayList<>();
+        List<String> readableColors = new ArrayList<>();
         for (String hex : hexCodes) {
             String name = mapHexToColorName(hex);
             if (!name.equals("unknown")) {
@@ -532,6 +631,89 @@ public class AiContentService {
         } catch (Exception e) {
             logger.error("AI Review Reply failed: {}", e.getMessage(), e);
             return "Thank you for your feedback! We appreciate your support.";
+        }
+    }
+
+    public MemeResponse generateMeme(BusinessProfile bp, String modelId, String command, Long userId) {
+        String finalModelId = (modelId != null && !modelId.isEmpty()) ? modelId : "gemini-2.5-flash-image";
+        
+        String commandText = (command != null && !command.trim().isEmpty()) 
+                ? "SPECIFIC INSTRUCTION / TOPIC: " + command.trim() 
+                : "Make it relevant to general industry trends.";
+
+        PromptTemplate pt = new PromptTemplate(MEME_TEMPLATE);
+        Prompt prompt = pt.create(Map.of(
+                "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
+                "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
+                "commandText", commandText,
+                "tone", bp.getBrandTone() != null ? bp.getBrandTone() : "witty",
+                "jsonStructure", "{\"caption\": \"...\", \"memeTextTop\": \"...\", \"memeTextBottom\": \"...\", \"imageDescription\": \"...\"}"
+        ));
+
+        String content;
+        try {
+            content = chatClient.prompt(prompt).call().content();
+        } catch (Exception e) {
+            logger.error("Meme Concept Generation failed: {}", e.getMessage());
+            throw new RuntimeException("Meme Generation failed.");
+        }
+
+        try {
+            if (content.contains("```json")) {
+                content = content.substring(content.indexOf("```json") + 7, content.lastIndexOf("```"));
+            } else if (content.contains("```")) {
+                content = content.substring(content.indexOf("```") + 3, content.lastIndexOf("```"));
+            }
+            
+            JsonNode memeJson = objectMapper.readTree(content);
+            String caption = memeJson.path("caption").asText();
+            String topText = memeJson.path("memeTextTop").asText();
+            String bottomText = memeJson.path("memeTextBottom").asText();
+            String scene = memeJson.path("imageDescription").asText();
+
+            // Crucial: Create a combined visual prompt that includes the text
+            String memeVisualPrompt = String.format(
+                    "A professional meme. SCENE: %s. " +
+                    "IMPORTANT: Render the following text DIRECTLY ON THE IMAGE. " +
+                    "TOP TEXT: '%s'. BOTTOM TEXT: '%s'. " +
+                    "Style: IMPACT MEME FONT, BOLD WHITE WITH BLACK OUTLINE.",
+                    scene, topText, bottomText);
+
+            String imageUrl = generateAndUploadImage(memeVisualPrompt, "Generate a meme image", userId, finalModelId, bp);
+            
+            return new MemeResponse(imageUrl, caption);
+        } catch (Exception e) {
+            logger.error("❌ Failed to process meme generation: {}", e.getMessage());
+            throw new RuntimeException("Meme processing failed.");
+        }
+    }
+
+    public ViralOpportunityResponse generateViralOpportunity(BusinessProfile bp, String topic, Long userId) {
+        PromptTemplate pt = new PromptTemplate(VIRAL_OPPORTUNITY_TEMPLATE);
+        Prompt prompt = pt.create(Map.of(
+                "niche", bp.getNiche() != null ? bp.getNiche() : "general business",
+                "topic", (topic != null && !topic.isEmpty()) ? topic : "latest industry news",
+                "jsonStructure", "{\"trend\": \"...\", \"viralGap\": \"...\", \"draftPost\": \"...\", \"hashtags\": [\"#...\", \"...\"]}"
+        ));
+
+        String content;
+        try {
+            content = chatClient.prompt(prompt).call().content();
+        } catch (Exception e) {
+            logger.error("Viral Opportunity Generation failed: {}", e.getMessage());
+            throw new RuntimeException("Viral Opportunity Generation failed.");
+        }
+
+        try {
+            if (content.contains("```json")) {
+                content = content.substring(content.indexOf("```json") + 7, content.lastIndexOf("```"));
+            } else if (content.contains("```")) {
+                content = content.substring(content.indexOf("```") + 3, content.lastIndexOf("```"));
+            }
+            return objectMapper.readValue(content, ViralOpportunityResponse.class);
+        } catch (Exception e) {
+            logger.error("❌ Failed to parse viral opportunity: {}", e.getMessage());
+            throw new RuntimeException("Viral Opportunity processing failed.");
         }
     }
 }

@@ -30,6 +30,7 @@ D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\SocialT
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\dto\StandardErrorResponse.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\exception\GlobalExceptionHandler.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\exception\InsufficientCreditsException.java
+D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\exception\StorageLimitExceededException.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\exception\TokenRefreshException.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\model\AiModelSelection.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\model\ApiProtocol.java

@@ -56,4 +56,37 @@ public class ContentGenerationDtos {
     public static class PerformancePredictionRequest {
         private String draft;
     }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class MemeRequest {
+        private String modelId;
+        private String command;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class MemeResponse {
+        private String imageUrl;
+        private String caption;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ViralOpportunityRequest {
+        private String nicheTopic; // e.g. "AI", "Real Estate", "Crypto"
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ViralOpportunityResponse {
+        private String trend;
+        private String viralGap;
+        private String draftPost;
+        private List<String> hashtags;
+    }
 }
