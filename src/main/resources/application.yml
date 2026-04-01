@@ -9,6 +9,9 @@ server:
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:tQrBWiB]}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      initialization-fail-timeout: 0
+      connection-timeout: 10000
   jpa:
     hibernate:
       ddl-auto: update
@@ -22,6 +25,8 @@ server:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      connect-timeout: 2000
+      timeout: 2000
 
   mail:
     host: ${SMTP_SERVER:smtp.gmail.com}
@@ -68,6 +73,10 @@ management:
       show-details: always
       probes:
         enabled: true
+      group:
+        readiness:
+          include: health, db, redis
+          show-details: always
 
 mail:
   sender: ${SENDER_EMAIL:ewardmacllum@gmail.com}
