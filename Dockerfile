@@ -15,5 +15,5 @@ COPY --from=builder /app/target/*.jar app.jar
 # Expose the application port
 EXPOSE 8080
 
-# Run the application with optimized JVM flags
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-Xss512k", "-jar", "app.jar"]
+# Run the application using the shell-form of ENTRYPOINT for environment variable expansion
+ENTRYPOINT java -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xss512k -Dserver.port=${PORT:-8080} -jar app.jar

@@ -1,4 +1,6 @@
 spring:
+  main:
+    banner-mode: off
   application:
     name: ai-social-media-automation
 
@@ -64,6 +66,7 @@ spring:
 server:
   port: ${PORT:8080}
   address: 0.0.0.0
+  shutdown: graceful
 
 management:
   endpoints:
