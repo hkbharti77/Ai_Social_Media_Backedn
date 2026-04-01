@@ -30,3 +30,7 @@ steps:
 
 images:
   - 'europe-west1-docker.pkg.dev/gyanvaniai/cloud-run-source-deploy/ai_social_media_backedn/ai-social-media-backedn'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  logStreamingOption: STREAM_ON
