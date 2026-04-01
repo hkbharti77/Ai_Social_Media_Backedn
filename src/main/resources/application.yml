@@ -1,9 +1,7 @@
 spring:
   application:
     name: ai-social-media-automation
-server:
-  port: ${PORT:8080}
-  address: 0.0.0.0
+
   datasource:
     url: jdbc:postgresql://34.129.56.144:5432/ai_social_media
     username: ${DB_USERNAME:postgres}
@@ -62,6 +60,10 @@ server:
     imagen:
       image-model: gemini-3.1-flash-image-preview
       api-url: https://generativelanguage.googleapis.com/v1beta
+
+server:
+  port: ${PORT:8080}
+  address: 0.0.0.0
 
 management:
   endpoints:
