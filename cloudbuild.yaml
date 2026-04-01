@@ -1,0 +1,32 @@
+steps:
+  # Step 0: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'europe-west1-docker.pkg.dev/gyanvaniai/cloud-run-source-deploy/ai_social_media_backedn/ai-social-media-backedn', '.']
+
+  # Step 1: Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'europe-west1-docker.pkg.dev/gyanvaniai/cloud-run-source-deploy/ai_social_media_backedn/ai-social-media-backedn']
+
+  # Step 2: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ai-social-media-backedn'
+      - '--image'
+      - 'europe-west1-docker.pkg.dev/gyanvaniai/cloud-run-source-deploy/ai_social_media_backedn/ai-social-media-backedn'
+      - '--region'
+      - 'europe-west1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '1Gi'            # Essential: Increased memory for Spring Boot startup
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '300'            # Set longer timeout for slower cold starts
+
+images:
+  - 'europe-west1-docker.pkg.dev/gyanvaniai/cloud-run-source-deploy/ai_social_media_backedn/ai-social-media-backedn'
