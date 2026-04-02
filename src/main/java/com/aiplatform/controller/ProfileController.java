@@ -4,6 +4,7 @@ import com.aiplatform.model.BusinessProfile;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.BusinessProfileRepository;
 import com.aiplatform.repository.UserRepository;
+import com.aiplatform.service.AiBestTimeService;
 import com.aiplatform.security.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,9 @@ public class ProfileController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private AiBestTimeService aiBestTimeService;
 
     @GetMapping("/all")
     public ResponseEntity<java.util.List<BusinessProfile>> getAllProfiles() {
@@ -72,6 +76,13 @@ public class ProfileController {
         existing.setPostingFrequency(profile.getPostingFrequency());
         existing.setPreferredHashtags(profile.getPreferredHashtags());
 
+        // Update Scheduling Fields
+        if (profile.getMorningDraftTime() != null) existing.setMorningDraftTime(profile.getMorningDraftTime());
+        if (profile.getEveningDraftTime() != null) existing.setEveningDraftTime(profile.getEveningDraftTime());
+        if (profile.getMorningPublishTime() != null) existing.setMorningPublishTime(profile.getMorningPublishTime());
+        if (profile.getEveningPublishTime() != null) existing.setEveningPublishTime(profile.getEveningPublishTime());
+        if (profile.getUseAiBestTime() != null) existing.setUseAiBestTime(profile.getUseAiBestTime());
+
         // Update Enterprise Image Controls
         existing.setImageStyle(profile.getImageStyle());
         existing.setPeoplePreference(profile.getPeoplePreference());
@@ -95,5 +106,15 @@ public class ProfileController {
         existing.setNegativePrompt(profile.getNegativePrompt());
 
         return ResponseEntity.ok(businessProfileRepository.save(existing));
+    }
+
+    @GetMapping("/suggest-best-time")
+    public ResponseEntity<com.aiplatform.dto.SchedulingDtos.SuggestedTimes> suggestBestTime() {
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findById(userDetails.getId()).get();
+        BusinessProfile bp = businessProfileRepository.findAllByUser(user).stream().findFirst()
+                .orElseThrow(() -> new RuntimeException("Profile not found"));
+        
+        return ResponseEntity.ok(aiBestTimeService.suggestTimes(bp));
     }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "posts")
@@ -65,6 +66,33 @@ public class Post {
     private String threadContent; // Stores a JSON-serialized list of captions for threads
 
     @Builder.Default
+    @Column(name = "is_carousel")
+    private Boolean isCarousel = false;
+
+    @Column(name = "carousel_content", columnDefinition = "TEXT")
+    private String carouselContent; // Stores a JSON-serialized list of slides for carousels
+
+    @Builder.Default
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    // ─── Evergreen Queue Fields ───────────────────────────────────
+
+    /** True if the user has marked this post as evergreen for auto-recycling. */
+    @Builder.Default
+    @Column(name = "is_evergreen")
+    private Boolean isEvergreen = false;
+
+    /**
+     * Performance score used to rank evergreen candidates.
+     * Higher score = higher priority for auto-recycling.
+     * Formula: (likes*1) + (comments*3) + (shares*5) - (ageInDays*0.1)
+     */
+    @Builder.Default
+    @Column(name = "evergreen_score")
+    private Double evergreenScore = 0.0;
+
+    /** Tracks when this post was last auto-recycled to prevent spam reposts. */
+    @Column(name = "last_recycled_at")
+    private LocalDateTime lastRecycledAt;
 }

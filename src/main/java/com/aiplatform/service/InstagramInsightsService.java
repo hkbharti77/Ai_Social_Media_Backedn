@@ -66,8 +66,12 @@ public class InstagramInsightsService {
                 return mockBestTimeData();
             }
             return root;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            String errorBody = e.getResponseBodyAsString();
+            logger.warn("⚠️ [InstagramInsights] API Permission Denied (400): {}. Ensure 'instagram_manage_insights' scope is granted. Falling back to mock data.", errorBody);
+            return mockBestTimeData();
         } catch (Exception e) {
-            logger.error("Failed to fetch IG insights: {}", e.getMessage());
+            logger.warn("⚠️ [InstagramInsights] Failed to fetch IG insights (fallback to mock): {}", e.getMessage());
             return mockBestTimeData();
         }
     }

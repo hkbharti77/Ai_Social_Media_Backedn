@@ -103,6 +103,28 @@ public class BusinessProfile {
     @Column(name = "negative_prompt")
     private String negativePrompt;
 
+    // --- Dynamic Scheduling Fields (HH:mm format) ---
+    
+    @Column(name = "morning_draft_time")
+    @Builder.Default
+    private String morningDraftTime = "06:00"; 
+
+    @Column(name = "evening_draft_time")
+    @Builder.Default
+    private String eveningDraftTime = "15:00";
+
+    @Column(name = "morning_publish_time")
+    @Builder.Default
+    private String morningPublishTime = "09:00";
+
+    @Column(name = "evening_publish_time")
+    @Builder.Default
+    private String eveningPublishTime = "20:00";
+
+    @Column(name = "use_ai_best_time")
+    @Builder.Default
+    private Boolean useAiBestTime = false;
+
     @Embeddable
     @Getter
     @Setter

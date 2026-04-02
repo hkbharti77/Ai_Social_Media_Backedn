@@ -89,4 +89,39 @@ public class ContentGenerationDtos {
         private String draftPost;
         private List<String> hashtags;
     }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class CarouselGenerationRequest {
+        private String command;
+        private int slideCount = 3;
+        private String modelId;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class CarouselSlide {
+        private int slideNumber;
+        private String slideText;
+        private String imageSuggestion;
+        private String imageUrl;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class CarouselResponse {
+        private String caption;
+        private List<CarouselSlide> slides;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class RepurposeRequest {
+        private String url;
+        private String modelId;
+    }
 }

@@ -109,4 +109,33 @@ public class AiController {
 
         return ResponseEntity.ok(aiContentService.generateViralOpportunity(bp, request.getNicheTopic(), user.getId()));
     }
+
+    @PostMapping("/carousel")
+    public ResponseEntity<CarouselResponse> generateCarousel(@RequestBody CarouselGenerationRequest request) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Business Profile not found. Please create one first.");
+        }
+        BusinessProfile bp = profiles.get(0);
+
+        return ResponseEntity.ok(aiContentService.generateCarousel(bp, request, user.getId(), request.getModelId()));
+    }
+
+    @PostMapping("/repurpose")
+    public ResponseEntity<GenerationResponse> repurposeUrl(@RequestBody RepurposeRequest request) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        
+        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+        if (profiles.isEmpty()) {
+            throw new RuntimeException("Business Profile not found. Please create one first.");
+        }
+        BusinessProfile bp = profiles.get(0);
+
+        List<GeneratedPost> generatedPosts = aiContentService.repurposeContent(bp, request, user.getId(), request.getModelId());
+        return ResponseEntity.ok(new GenerationResponse(generatedPosts));
+    }
 }

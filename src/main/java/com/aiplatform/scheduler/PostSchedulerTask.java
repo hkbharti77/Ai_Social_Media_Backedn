@@ -1,14 +1,16 @@
 package com.aiplatform.scheduler;
 
+import com.aiplatform.model.BusinessProfile;
 import com.aiplatform.model.Post;
 import com.aiplatform.model.PostStatus;
+import com.aiplatform.repository.BusinessProfileRepository;
 import com.aiplatform.repository.PostRepository;
 import com.aiplatform.service.AutoPostService;
+import com.aiplatform.service.EvergreenService;
 import com.aiplatform.service.PublisherService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.DayOfWeek;
 import java.util.List;
 
 @Component
@@ -27,16 +30,16 @@ public class PostSchedulerTask {
     private PostRepository postRepository;
 
     @Autowired
+    private BusinessProfileRepository businessProfileRepository;
+
+    @Autowired
     private PublisherService publisherService;
 
     @Autowired
     private AutoPostService autoPostService;
 
-    @Value("${app.scheduling.morning-publish-time:09:00}")
-    private String morningPublishTime;
-
-    @Value("${app.scheduling.evening-publish-time:20:00}")
-    private String eveningPublishTime;
+    @Autowired
+    private EvergreenService evergreenService;
 
     // ─────────────────────────────────────────────────
     // EXISTING: Publish SCHEDULED posts every minute
@@ -76,64 +79,79 @@ public class PostSchedulerTask {
     // ─────────────────────────────────────────────────
 
     /**
-     * Morning Draft Generation (defaults to 6:00 AM IST)
+     * DYNAMIC SCHEDULER TICK (Runs every minute)
+     * Checks all BusinessProfiles to see if it's time to generate drafts or auto-schedule.
      */
-    @Scheduled(cron = "${app.scheduling.morning-draft-cron}", zone = "Asia/Kolkata")
-    public void generateMorningDraft() {
-        logger.info("🌅 [AutoPost Scheduler] Triggering MORNING draft generation at {}", LocalDateTime.now(IST));
+    @Scheduled(fixedRate = 60000)
+    public void masterSchedulingTick() {
+        LocalTime now = LocalTime.now(IST).withSecond(0).withNano(0);
+        String timeStr = now.toString();
+        logger.info("🕒 [Scheduler] Tick at {} IST", timeStr);
+
         try {
-            autoPostService.generateDraftsForAllUsers("MORNING");
+            // 1. Check for Morning Draft Generation
+            List<BusinessProfile> morningDraftProfiles = businessProfileRepository.findByMorningDraftTime(timeStr);
+            if (!morningDraftProfiles.isEmpty()) {
+                autoPostService.generateDraftsForMatchingProfiles("MORNING", morningDraftProfiles);
+            }
+
+            // 2. Check for Evening Draft Generation
+            List<BusinessProfile> eveningDraftProfiles = businessProfileRepository.findByEveningDraftTime(timeStr);
+            if (!eveningDraftProfiles.isEmpty()) {
+                autoPostService.generateDraftsForMatchingProfiles("EVENING", eveningDraftProfiles);
+            }
+
+            // 3. Check for Auto-Scheduling (Match publish time)
+            checkAndAutoSchedule(timeStr);
+
         } catch (Exception e) {
-            logger.error("❌ [AutoPost Scheduler] Morning draft generation failed: {}", e.getMessage(), e);
+            logger.error("❌ [Scheduler] Master tick failed: {}", e.getMessage(), e);
         }
     }
 
-    /**
-     * Evening Draft Generation (defaults to 3:00 PM IST)
-     */
-    @Scheduled(cron = "${app.scheduling.evening-draft-cron}", zone = "Asia/Kolkata")
-    public void generateEveningDraft() {
-        logger.info("🌆 [Scheduler] Triggering EVENING draft generation at {}", LocalDateTime.now(IST));
-        try {
-            autoPostService.generateDraftsForAllUsers("EVENING");
-        } catch (Exception e) {
-            logger.error("❌ [AutoPost Scheduler] Evening draft generation failed: {}", e.getMessage(), e);
+    private void checkAndAutoSchedule(String timeStr) {
+        List<BusinessProfile> morningPub = businessProfileRepository.findByMorningPublishTime(timeStr);
+        if (!morningPub.isEmpty()) {
+            autoPostService.autoScheduleForProfiles("MORNING", morningPub, LocalDateTime.now(IST));
+        }
+
+        List<BusinessProfile> eveningPub = businessProfileRepository.findByEveningPublishTime(timeStr);
+        if (!eveningPub.isEmpty()) {
+            autoPostService.autoScheduleForProfiles("EVENING", eveningPub, LocalDateTime.now(IST));
         }
     }
 
-    // ─────────────────────────────────────────────────
-    // NEW: Auto-Schedule Unapproved Drafts (IST)
-    // ─────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────
+    // EVERGREEN QUEUE: Scheduled fill
+    // ─────────────────────────────────────────────────────────────────
 
     /**
-     * Auto-Schedule Morning Drafts (defaults to 8:00 AM IST)
+     * Evergreen Daily Check — runs every day at 06:30 AM IST.
+     *
+     * On TUESDAYS: proactively fills both the morning (09:00) and evening (20:00) slots
+     *              for all users, even if no drafts were generated.
+     *
+     * On ALL days: fills morning and evening slots if they are still empty after
+     *              the normal draft+auto-schedule cycle (safety net).
      */
-    @Scheduled(cron = "${app.scheduling.morning-auto-cron}", zone = "Asia/Kolkata")
-    public void autoScheduleMorning() {
-        logger.info("🤖 [Scheduler] Auto-scheduling unapproved MORNING drafts at {}", LocalDateTime.now(IST));
-        try {
-            // Morning drafts auto-publish at target time (e.g. 9:00 AM) today IST
-            LocalTime time = LocalTime.parse(morningPublishTime);
-            LocalDateTime publishAt = LocalDate.now(IST).atTime(time);
-            autoPostService.autoScheduleIfNotApproved("MORNING", publishAt);
-        } catch (Exception e) {
-            logger.error("❌ [AutoPost Scheduler] Morning auto-schedule check failed: {}", e.getMessage(), e);
-        }
-    }
+    @Scheduled(cron = "0 30 6 * * *", zone = "Asia/Kolkata")
+    public void evergreenDailyFill() {
+        LocalDateTime now = LocalDateTime.now(IST);
+        DayOfWeek today = now.getDayOfWeek();
+        logger.info("🌿 [Evergreen] Daily fill check at {} ({})", now, today);
 
-    /**
-     * Auto-Schedule Evening Drafts (defaults to 6:00 PM IST)
-     */
-    @Scheduled(cron = "${app.scheduling.evening-auto-cron}", zone = "Asia/Kolkata")
-    public void autoScheduleEveningIfNotApproved() {
-        logger.info("🤖 [Scheduler] Auto-scheduling unapproved EVENING drafts at {}", LocalDateTime.now(IST));
-        try {
-            // Evening drafts auto-publish at target time (e.g. 8:00 PM) today IST
-            LocalTime time = LocalTime.parse(eveningPublishTime);
-            LocalDateTime publishAt = LocalDate.now(IST).atTime(time);
-            autoPostService.autoScheduleIfNotApproved("EVENING", publishAt);
-        } catch (Exception e) {
-            logger.error("❌ [AutoPost Scheduler] Evening auto-schedule check failed: {}", e.getMessage(), e);
+        LocalDateTime morningSlot = LocalDate.now(IST).atTime(9, 0);
+        LocalDateTime eveningSlot = LocalDate.now(IST).atTime(20, 0);
+
+        if (today == DayOfWeek.TUESDAY) {
+            logger.info("📅 [Evergreen] Tuesday detected — running proactive evergreen fill for all users.");
+            evergreenService.fillAllUsersEmptySlot(morningSlot, "MORNING");
+            evergreenService.fillAllUsersEmptySlot(eveningSlot, "EVENING");
+        } else {
+            // Non-Tuesday: just plug any still-empty slots
+            logger.info("🔍 [Evergreen] Non-Tuesday safety-net fill for any empty slots.");
+            evergreenService.fillAllUsersEmptySlot(morningSlot, "MORNING");
+            evergreenService.fillAllUsersEmptySlot(eveningSlot, "EVENING");
         }
     }
 }

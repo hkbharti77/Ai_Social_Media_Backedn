@@ -4,6 +4,9 @@ import com.aiplatform.dto.ContentGenerationDtos.*;
 import com.aiplatform.model.AiModelSelection;
 import com.aiplatform.model.ApiProtocol;
 import com.aiplatform.model.BusinessProfile;
+import com.aiplatform.model.AiUsageLog;
+import com.aiplatform.repository.AiUsageLogRepository;
+import com.aiplatform.repository.UserRepository;
 import com.aiplatform.util.SecurityUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -20,9 +25,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -42,6 +52,8 @@ public class AiContentService {
     private final ObjectMapper objectMapper;
     private final SubscriptionService subscriptionService;
     private final DistributedLockService lockService;
+    private final AiUsageLogRepository aiUsageLogRepository;
+    private final UserRepository userRepository;
 
     @Value("${spring.ai.google.genai.api-key}")
     private String apiKey;
@@ -155,6 +167,42 @@ public class AiContentService {
             {jsonStructure}
             """;
 
+    private static final String CAROUSEL_TEMPLATE = """
+            You are a social media carousel expert. Create a multi-slide carousel for {businessName}, a {niche} brand.
+            Target audience: {audience}.
+            Topic/Command: {command}.
+            Number of slides: {slideCount}
+            
+            Visual Brand Identity & Constraints:
+            {visualContext}
+            
+            Return a JSON object exactly like this structure:
+            {jsonStructure}
+            
+            Return ONLY valid JSON wrapped in curly braces. 
+            Crucial: The 'imageSuggestion' must NOT include technical labels, buzzwords, or hex codes (e.g., #FFFFFF). 
+            Instead, refer to colors by name (e.g., 'warm gold', 'midnight blue').
+            The 'imageSuggestion' MUST describe a scene, NOT text. Do NOT include words or quotes for the image to render.
+            """;
+
+    private static final String REPURPOSE_TEMPLATE = """
+            You are a social media expert. Your task is to repurpose the following website/video content into 5 distinct, highly engaging social media posts for {businessName}, a {niche} brand.
+            Target audience: {audience}.
+            
+            Extracted Content:
+            "{scrapedContent}"
+            
+            Visual Brand Identity & Constraints:
+            {visualContext}
+            
+            Return a JSON object exactly like this structure:
+            {jsonStructure}
+            
+            Return ONLY valid JSON wrapped in curly braces. Create exactly 5 distinct posts focusing on different angles from the extracted content.
+            Crucial: The 'imageSuggestion' must NOT include technical labels, buzzwords, or hex codes (e.g., #FFFFFF). 
+            Instead, refer to colors by name (e.g., 'warm gold', 'midnight blue').
+            The 'imageSuggestion' MUST describe a scene, NOT text. Do NOT include words or quotes for the image to render.
+            """;
 
     public GeneratedPost generatePost(BusinessProfile bp, String userCmd, Long userId, String modelId) {
         // 1. Model Metadata & Defaulting
@@ -187,12 +235,15 @@ public class AiContentService {
             // Link creativity level (0.0 - 1.0) to model temperature
             double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
             
-            content = chatClient.prompt(prompt)
+            ChatResponse response = chatClient.prompt(prompt)
                     .options(GoogleGenAiChatOptions.builder()
                             .temperature(temperature)
                             .build())
                     .call()
-                    .content();
+                    .chatResponse();
+            
+            content = response.getResult().getOutput().getText();
+            logUsage(userId, finalModelId, "POST_GENERATION", response.getMetadata().getUsage());
         } catch (Exception e) {
             logger.error("❌ AI Chat Generation failed: {}", e.getMessage(), e);
             if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -252,7 +303,9 @@ public class AiContentService {
 
         String content;
         try {
-            content = chatClient.prompt(prompt).call().content();
+            ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
+            content = response.getResult().getOutput().getText();
+            logUsage(userId, finalModelId, "THREAD_GENERATION", response.getMetadata().getUsage());
         } catch (Exception e) {
             logger.error("❌ AI Thread Generation failed: {}", e.getMessage());
             throw new RuntimeException("AI Thread Generation failed.");
@@ -291,7 +344,9 @@ public class AiContentService {
 
         String content;
         try {
-            content = chatClient.prompt(prompt).call().content();
+            ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
+            content = response.getResult().getOutput().getContent();
+            logUsage(userId, finalModelId, "AI_GENERATION", response.getMetadata().getUsage());
         } catch (Exception e) {
             logger.error("AI Analysis failed: {}", e.getMessage(), e);
             if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -324,7 +379,9 @@ public class AiContentService {
 
         String content;
         try {
-            content = chatClient.prompt(prompt).call().content();
+            ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
+            content = response.getResult().getOutput().getContent();
+            logUsage(userId, finalModelId, "AI_GENERATION", response.getMetadata().getUsage());
         } catch (Exception e) {
             logger.error("❌ Content Strategy failed: {}", e.getMessage(), e);
             if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -358,7 +415,9 @@ public class AiContentService {
 
         String content;
         try {
-            content = chatClient.prompt(prompt).call().content();
+            ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
+            content = response.getResult().getOutput().getContent();
+            logUsage(userId, finalModelId, "AI_GENERATION", response.getMetadata().getUsage());
         } catch (Exception e) {
             logger.error("AI Performance Prediction failed: {}", e.getMessage(), e);
             if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -627,7 +686,9 @@ public class AiContentService {
         ));
 
         try {
-            return chatClient.prompt(prompt).call().content();
+            ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
+            logUsage(null, "gemini-1.5-flash", "REVIEW_REPLY", response.getMetadata().getUsage());
+            return response.getResult().getOutput().getText();
         } catch (Exception e) {
             logger.error("AI Review Reply failed: {}", e.getMessage(), e);
             return "Thank you for your feedback! We appreciate your support.";
@@ -652,7 +713,9 @@ public class AiContentService {
 
         String content;
         try {
-            content = chatClient.prompt(prompt).call().content();
+            ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
+            content = response.getResult().getOutput().getContent();
+            logUsage(userId, finalModelId, "AI_GENERATION", response.getMetadata().getUsage());
         } catch (Exception e) {
             logger.error("Meme Concept Generation failed: {}", e.getMessage());
             throw new RuntimeException("Meme Generation failed.");
@@ -698,7 +761,9 @@ public class AiContentService {
 
         String content;
         try {
-            content = chatClient.prompt(prompt).call().content();
+            ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
+            content = response.getResult().getOutput().getContent();
+            logUsage(userId, finalModelId, "AI_GENERATION", response.getMetadata().getUsage());
         } catch (Exception e) {
             logger.error("Viral Opportunity Generation failed: {}", e.getMessage());
             throw new RuntimeException("Viral Opportunity Generation failed.");
@@ -714,6 +779,209 @@ public class AiContentService {
         } catch (Exception e) {
             logger.error("❌ Failed to parse viral opportunity: {}", e.getMessage());
             throw new RuntimeException("Viral Opportunity processing failed.");
+        }
+    }
+
+    public CarouselResponse generateCarousel(BusinessProfile bp, CarouselGenerationRequest request, Long userId, String modelId) {
+        String finalModelId = (modelId != null && !modelId.isEmpty()) ? modelId : 
+                             SecurityUtils.getCurrentUser().get().getSubscriptionTier().getDefaultImageModel();
+                             
+        int slideCount = request.getSlideCount() > 0 ? request.getSlideCount() : 3;
+
+        // Deduct credits for each slide
+        lockService.executeWithLock("credits:" + userId, Duration.ofSeconds(5), Duration.ofSeconds(10), () -> {
+            for (int i = 0; i < slideCount; i++) {
+                subscriptionService.checkAndDecrementCredits(userId, finalModelId, "AI Carousel Generation (" + finalModelId + ")");
+            }
+            return null;
+        });
+
+        String visualContext = buildVisualContext(bp);
+        PromptTemplate pt = new PromptTemplate(CAROUSEL_TEMPLATE);
+        Prompt prompt = pt.create(Map.of(
+                "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
+                "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
+                "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general",
+                "command", request.getCommand() != null ? request.getCommand() : "Create a carousel post",
+                "slideCount", slideCount,
+                "visualContext", visualContext,
+                "jsonStructure", "{\"caption\": \"Main post caption...\", \"slides\": [{\"slideNumber\": 1, \"slideText\": \"...\", \"imageSuggestion\": \"...\"}, {\"slideNumber\": 2, \"slideText\": \"...\", \"imageSuggestion\": \"...\"}]}"
+        ));
+
+        logger.info("🎠 Generating AI Carousel [Slides: {}, Model: {}] for user: {}", slideCount, finalModelId, userId);
+
+        String content;
+        try {
+            double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
+            ChatResponse response = chatClient.prompt(prompt)
+                    .options(GoogleGenAiChatOptions.builder()
+                            .temperature(temperature)
+                            .build())
+                    .call()
+                    .chatResponse();
+            
+            content = response.getResult().getOutput().getText();
+            logUsage(userId, finalModelId, "CAROUSEL_GENERATION", response.getMetadata().getUsage());
+        } catch (Exception e) {
+            logger.error("❌ AI Carousel Generation failed: {}", e.getMessage(), e);
+            throw new RuntimeException("AI Carousel Generation failed.", e);
+        }
+
+        try {
+            if (content.contains("```json")) {
+                content = content.substring(content.indexOf("```json") + 7, content.lastIndexOf("```"));
+            } else if (content.contains("```")) {
+                content = content.substring(content.indexOf("```") + 3, content.lastIndexOf("```"));
+            }
+            
+            CarouselResponse carouselResponse = objectMapper.readValue(content, CarouselResponse.class);
+            
+            // Generate Images for each slide
+            if (carouselResponse.getSlides() != null) {
+                for (CarouselSlide slide : carouselResponse.getSlides()) {
+                    if (slide.getImageSuggestion() != null && !slide.getImageSuggestion().isEmpty()) {
+                        try {
+                            String imageUrl = generateAndUploadImage(slide.getImageSuggestion(), request.getCommand(), userId, finalModelId, bp);
+                            slide.setImageUrl(imageUrl);
+                        } catch (Exception e) {
+                            logger.error("❌ Failed to generate AI image for slide {}: {}", slide.getSlideNumber(), e.getMessage());
+                        }
+                    }
+                }
+            }
+            
+            return carouselResponse;
+        } catch (Exception e) {
+            logger.error("❌ Failed to parse Carousel: " + content, e);
+            throw new RuntimeException("AI Carousel processing failed.");
+        }
+    }
+
+    public List<GeneratedPost> repurposeContent(BusinessProfile bp, RepurposeRequest request, Long userId, String modelId) {
+        String finalModelId = (modelId != null && !modelId.isEmpty()) ? modelId : 
+                             SecurityUtils.getCurrentUser().get().getSubscriptionTier().getDefaultImageModel();
+
+        // Deduct credits for 5 posts
+        lockService.executeWithLock("credits:" + userId, Duration.ofSeconds(5), Duration.ofSeconds(10), () -> {
+            for (int i = 0; i < 5; i++) {
+                subscriptionService.checkAndDecrementCredits(userId, finalModelId, "AI Repurpose Content (" + finalModelId + ")");
+            }
+            return null;
+        });
+
+        // Scrape the URL
+        String scrapedContent;
+        try {
+            Document doc = Jsoup.connect(request.getUrl())
+                    .timeout(10000)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    .get();
+            
+            StringBuilder contentBuilder = new StringBuilder();
+            contentBuilder.append("Title: ").append(doc.title()).append("\n");
+            
+            Element metaDescription = doc.selectFirst("meta[name=description]");
+            if (metaDescription != null) {
+                contentBuilder.append("Description: ").append(metaDescription.attr("content")).append("\n");
+            }
+            
+            // Extract paragraphs (limit to ~4000 characters to avoid huge prompts)
+            String text = doc.body().text();
+            int maxLength = 4000;
+            if (text.length() > maxLength) {
+                text = text.substring(0, maxLength) + "...";
+            }
+            contentBuilder.append("Content: ").append(text);
+            
+            scrapedContent = contentBuilder.toString();
+            logger.info("Successfully scraped {} chars from {}", scrapedContent.length(), request.getUrl());
+        } catch (Exception e) {
+            logger.error("❌ Scrape failed for URL {}: {}", request.getUrl(), e.getMessage());
+            throw new RuntimeException("Failed to extract content from the provided URL. Please make sure the URL is accessible.");
+        }
+
+        String visualContext = buildVisualContext(bp);
+        PromptTemplate pt = new PromptTemplate(REPURPOSE_TEMPLATE);
+        Prompt prompt = pt.create(Map.of(
+                "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
+                "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
+                "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general",
+                "scrapedContent", scrapedContent,
+                "visualContext", visualContext,
+                "jsonStructure", "{\"posts\": [{\"caption\": \"...\", \"hashtags\": [\"#...\"], \"imageSuggestion\": \"...\"}, {\"caption\": \"...\", \"hashtags\": [\"#...\"], \"imageSuggestion\": \"...\"}]}"
+        ));
+
+        logger.info("🚀 Generating AI repurposed content (5 posts) [Model: {}] for user: {}", finalModelId, userId);
+
+        String content;
+        try {
+            double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
+            ChatResponse chatResponse = chatClient.prompt(prompt)
+                    .options(GoogleGenAiChatOptions.builder()
+                            .temperature(temperature)
+                            .build())
+                    .call()
+                    .chatResponse();
+            
+            content = chatResponse.getResult().getOutput().getText();
+            logUsage(userId, finalModelId, "REPURPOSE_CONTENT", chatResponse.getMetadata().getUsage());
+        } catch (Exception e) {
+            logger.error("❌ AI Repurpose Generation failed: {}", e.getMessage(), e);
+            throw new RuntimeException("AI Repurpose Generation failed.", e);
+        }
+
+        try {
+            if (content.contains("```json")) {
+                content = content.substring(content.indexOf("```json") + 7, content.lastIndexOf("```"));
+            } else if (content.contains("```")) {
+                content = content.substring(content.indexOf("```") + 3, content.lastIndexOf("```"));
+            }
+            
+            GenerationResponse response = objectMapper.readValue(content, GenerationResponse.class);
+            List<GeneratedPost> generatedPosts = response.getPosts();
+            
+            // Generate Images for each post
+            if (generatedPosts != null) {
+                for (GeneratedPost post : generatedPosts) {
+                    if (post.getImageSuggestion() != null && !post.getImageSuggestion().isEmpty()) {
+                        try {
+                            String imageUrl = generateAndUploadImage(post.getImageSuggestion(), "Repurpose " + request.getUrl(), userId, finalModelId, bp);
+                            post.setImageUrl(imageUrl);
+                        } catch (Exception e) {
+                            logger.error("❌ Failed to generate AI image for repurposed post: {}", e.getMessage());
+                        }
+                    }
+                }
+            }
+            
+            return generatedPosts;
+        } catch (Exception e) {
+            logger.error("❌ Failed to parse Repurpose output: " + content, e);
+            throw new RuntimeException("AI Content processing failed.");
+        }
+    }
+    private void logUsage(Long userId, String modelId, String actionType, Usage usage) {
+        try {
+            if (userId == null) {
+                userId = SecurityUtils.getCurrentUserId();
+            }
+            if (userId == null) return;
+
+            final Long finalUserId = userId;
+            userRepository.findById(finalUserId).ifPresent(user -> {
+                AiUsageLog log = AiUsageLog.builder()
+                        .user(user)
+                        .modelId(modelId)
+                        .actionType(actionType)
+                        .promptTokens(usage != null ? (int) usage.getPromptTokens() : 0)
+                        .completionTokens(usage != null ? (int) usage.getCompletionTokens() : 0)
+                        .totalTokens(usage != null ? (int) usage.getTotalTokens() : 0)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+                aiUsageLogRepository.save(log);
+            });
+        } catch (Exception e) {
+            logger.error("❌ Failed to log AI usage: {}", e.getMessage());
         }
     }
 }

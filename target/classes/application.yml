@@ -2,9 +2,9 @@ spring:
   application:
     name: ai-social-media-automation
   datasource:
-    url: jdbc:postgresql://34.129.56.144:5432/ai_social_media
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:tQrBWiB]}
+    url: jdbc:postgresql://localhost:5432/ai_social_media
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:

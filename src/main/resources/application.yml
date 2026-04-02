@@ -1,17 +1,11 @@
 spring:
-  main:
-    banner-mode: off
   application:
     name: ai-social-media-automation
-
   datasource:
-    url: jdbc:postgresql://34.129.56.144:5432/ai_social_media
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:tQrBWiB]}
+    url: jdbc:postgresql://localhost:5432/ai_social_media
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     driver-class-name: org.postgresql.Driver
-    hikari:
-      initialization-fail-timeout: 0
-      connection-timeout: 10000
   jpa:
     hibernate:
       ddl-auto: update
@@ -25,8 +19,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      connect-timeout: 2000
-      timeout: 2000
 
   mail:
     host: ${SMTP_SERVER:smtp.gmail.com}
@@ -63,11 +55,6 @@ spring:
       image-model: gemini-3.1-flash-image-preview
       api-url: https://generativelanguage.googleapis.com/v1beta
 
-server:
-  port: ${PORT:8080}
-  address: 0.0.0.0
-  shutdown: graceful
-
 management:
   endpoints:
     web:
@@ -78,10 +65,6 @@ management:
       show-details: always
       probes:
         enabled: true
-      group:
-        readiness:
-          include: health, db, redis
-          show-details: always
 
 mail:
   sender: ${SENDER_EMAIL:ewardmacllum@gmail.com}

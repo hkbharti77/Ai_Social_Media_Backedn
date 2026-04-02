@@ -6,6 +6,7 @@ import com.aiplatform.model.PostStatus;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.PostRepository;
 import com.aiplatform.service.AutoPostService;
+import com.aiplatform.service.EvergreenService;
 import com.aiplatform.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/posts")
@@ -28,6 +30,7 @@ public class PostController {
 
     private final PostRepository postRepository;
     private final AutoPostService autoPostService;
+    private final EvergreenService evergreenService;
 
     @GetMapping
     public ResponseEntity<List<Post>> getPosts() {
@@ -95,6 +98,14 @@ public class PostController {
             existing.setSlotType(postUpdates.getSlotType());
         }
 
+        // Support Carousel updates
+        if (postUpdates.getIsCarousel() != null) {
+            existing.setIsCarousel(postUpdates.getIsCarousel());
+        }
+        if (postUpdates.getCarouselContent() != null) {
+            existing.setCarouselContent(postUpdates.getCarouselContent());
+        }
+
         return ResponseEntity.ok(postRepository.save(existing));
     }
 
@@ -132,7 +143,7 @@ public class PostController {
     public ResponseEntity<Post> generateDraftForCurrentUser(@RequestParam String slot) {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
-        Post created = autoPostService.generateDraftForUser(user, slot.toUpperCase());
+        Post created = autoPostService.generateDraftForUser(user, slot.toUpperCase(), null);
         if (created == null) {
             return ResponseEntity.ok().build();
         }
@@ -167,5 +178,87 @@ public class PostController {
         post.setStatus(PostStatus.SCHEDULED);
         
         return ResponseEntity.ok(postRepository.save(post));
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // EVERGREEN QUEUE ENDPOINTS
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/posts/evergreen
+     * Returns all posts marked as evergreen for the current user, ordered by score.
+     */
+    @GetMapping("/evergreen")
+    public ResponseEntity<List<Post>> getEvergreenPosts() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        List<Post> evergreenPosts = evergreenService.getEvergreenPostsForUser(userId);
+        logger.info("🌿 [PostController] Fetched {} evergreen posts for user id={}", evergreenPosts.size(), userId);
+        return ResponseEntity.ok(evergreenPosts);
+    }
+
+    /**
+     * PUT /api/v1/posts/{id}/evergreen
+     * Marks a PUBLISHED post as evergreen and computes its initial score.
+     */
+    @PutMapping("/{id}/evergreen")
+    public ResponseEntity<Post> markEvergreen(@PathVariable Long id) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        try {
+            Post updated = evergreenService.markAsEvergreen(id, userId);
+            return ResponseEntity.ok(updated);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).build();
+        }
+    }
+
+    /**
+     * DELETE /api/v1/posts/{id}/evergreen
+     * Removes a post from the Evergreen Queue.
+     */
+    @DeleteMapping("/{id}/evergreen")
+    public ResponseEntity<Post> unmarkEvergreen(@PathVariable Long id) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        try {
+            Post updated = evergreenService.unmarkEvergreen(id, userId);
+            return ResponseEntity.ok(updated);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).build();
+        }
+    }
+
+    /**
+     * POST /api/v1/posts/evergreen/fill
+     * Manually triggers an evergreen fill for the current user's empty slots.
+     * Useful for testing and for users who want to immediately recycle content.
+     */
+    @PostMapping("/evergreen/fill")
+    public ResponseEntity<Map<String, Object>> triggerEvergreenFill(
+            @RequestParam(defaultValue = "MORNING") String slot) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+
+        ZoneId ist = ZoneId.of("Asia/Kolkata");
+        LocalDateTime slotTime;
+        if ("EVENING".equalsIgnoreCase(slot)) {
+            slotTime = LocalDate.now(ist).atTime(20, 0);
+        } else {
+            slotTime = LocalDate.now(ist).atTime(9, 0);
+        }
+
+        var result = evergreenService.fillEmptySlotWithEvergreen(user, slotTime, slot.toUpperCase());
+
+        if (result.isPresent()) {
+            return ResponseEntity.ok(Map.of(
+                "message", "Evergreen post recycled successfully",
+                "scheduledPostId", result.get().getId(),
+                "scheduledAt", result.get().getScheduledAt().toString()
+            ));
+        } else {
+            return ResponseEntity.ok(Map.of(
+                "message", "Slot already filled or no eligible evergreen posts found."
+            ));
+        }
     }
 }

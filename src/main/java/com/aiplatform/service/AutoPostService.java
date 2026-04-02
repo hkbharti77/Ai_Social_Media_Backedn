@@ -59,48 +59,51 @@ public class AutoPostService {
      * for this slot today.
      */
     @Transactional
+    public void generateDraftsForMatchingProfiles(String slotType, List<BusinessProfile> targetProfiles) {
+        logger.info("📝 [AutoPost] Bulk generating {} drafts for {} profiles matching this time.", 
+                slotType, targetProfiles.size());
+        
+        for (BusinessProfile bp : targetProfiles) {
+            try {
+                generateDraftForUser(bp.getUser(), slotType, bp);
+            } catch (Exception e) {
+                logger.error("❌ [AutoPost] Failed to generate {} draft for user {}: {}",
+                        slotType, bp.getUser().getEmail(), e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * Legacy method for all users (e.g. if we still need a global trigger)
+     */
+    @Transactional
     public void generateDraftsForAllUsers(String slotType) {
-        logger.info("📝 [AutoPost] Starting draft generation for slot: {}", slotType);
+        logger.info("📝 [AutoPost] Starting global draft generation for slot: {}", slotType);
         List<User> allUsers = userRepository.findAll();
 
         for (User user : allUsers) {
             try {
-                generateDraftForUser(user, slotType);
+                List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+                if (!profiles.isEmpty()) {
+                    generateDraftForUser(user, slotType, profiles.get(0));
+                }
             } catch (Exception e) {
                 logger.error("❌ [AutoPost] Failed to generate {} draft for user {}: {}",
                         slotType, user.getEmail(), e.getMessage(), e);
             }
         }
-        logger.info("✅ [AutoPost] Draft generation complete for slot: {}", slotType);
     }
 
     /**
      * Generates a draft for a single user for the given slot if one doesn't already exist today.
      */
     @Transactional
-    public Post generateDraftForUser(User user, String slotType) {
-        // Check if a draft already exists for this slot today
-        LocalDateTime startOfDay = LocalDate.now(IST).atStartOfDay();
-        List<Post> existingDrafts = postRepository.findByUserAndStatusAndSlotType(
-                user, PostStatus.DRAFT, slotType);
-
-        boolean hasToday = existingDrafts.stream()
-                .anyMatch(p -> p.getCreatedAt() != null && p.getCreatedAt().isAfter(startOfDay));
-
-        if (hasToday) {
-            logger.info("⏭️ [AutoPost] User {} already has a {} draft for today – skipping.",
-                    user.getEmail(), slotType);
-            return null;
+    public Post generateDraftForUser(User user, String slotType, BusinessProfile bp) {
+        if (bp == null) {
+            List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
+            if (profiles.isEmpty()) return null;
+            bp = profiles.get(0);
         }
-
-        // Load business profile
-        List<BusinessProfile> profiles = businessProfileRepository.findAllByUser(user);
-        if (profiles.isEmpty()) {
-            logger.warn("⚠️ [AutoPost] No BusinessProfile found for user {} – skipping.", user.getEmail());
-            return null;
-        }
-
-        BusinessProfile bp = profiles.get(0);
         String command = buildSlotCommand(slotType, bp);
 
         logger.info("🤖 [AutoPost] Generating {} draft for user {} (business: {})",
@@ -137,6 +140,49 @@ public class AutoPostService {
      *
      * @param slotType   MORNING or EVENING
      * @param publishAt  The IST datetime at which to publish (9 AM or 8 PM)
+     */
+    @Transactional
+    public void autoScheduleForProfiles(String slotType, List<BusinessProfile> profiles, LocalDateTime basePublishAt) {
+        logger.info("⏰ [AutoPost] Processing auto-schedule for {} profiles in slot {}", profiles.size(), slotType);
+        
+        for (BusinessProfile bp : profiles) {
+            try {
+                LocalDateTime publishAt = basePublishAt; 
+                // If the perfil has a custom time, we use it, otherwise we use the base fallback
+                if ("MORNING".equals(slotType) && bp.getMorningPublishTime() != null) {
+                    publishAt = LocalDate.now(IST).atTime(java.time.LocalTime.parse(bp.getMorningPublishTime()));
+                } else if ("EVENING".equals(slotType) && bp.getEveningPublishTime() != null) {
+                    publishAt = LocalDate.now(IST).atTime(java.time.LocalTime.parse(bp.getEveningPublishTime()));
+                }
+
+                autoScheduleForUser(bp.getUser(), slotType, publishAt);
+            } catch (Exception e) {
+                logger.error("❌ [AutoPost] Failed to auto-schedule {} for user {}: {}", 
+                        slotType, bp.getUser().getEmail(), e.getMessage());
+            }
+        }
+    }
+
+    @Transactional
+    public void autoScheduleForUser(User user, String slotType, LocalDateTime publishAt) {
+        LocalDateTime startOfDay = LocalDate.now(IST).atStartOfDay();
+        List<Post> unapprovedDrafts = postRepository.findByUserAndStatusAndSlotTypeAndCreatedAtAfter(
+                user, PostStatus.DRAFT, slotType, startOfDay);
+
+        if (unapprovedDrafts.isEmpty()) return;
+
+        for (Post post : unapprovedDrafts) {
+            post.setStatus(PostStatus.SCHEDULED);
+            post.setScheduledAt(publishAt);
+            post.setAutoScheduled(true);
+            postRepository.save(post);
+            logger.info("📅 [AutoPost] Post id={} auto-scheduled for {} (user: {})",
+                    post.getId(), publishAt, post.getUser().getEmail());
+        }
+    }
+
+    /**
+     * Legacy method for fallback
      */
     @Transactional
     public void autoScheduleIfNotApproved(String slotType, LocalDateTime publishAt) {
