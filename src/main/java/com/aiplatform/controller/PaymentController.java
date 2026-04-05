@@ -25,7 +25,6 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
-    private final SubscriptionService subscriptionService;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PdfService pdfService;
 
@@ -40,25 +39,41 @@ public class PaymentController {
         
         String tierName = (String) request.get("tier");
         SubscriptionTier targetTier = SubscriptionTier.valueOf(tierName.toUpperCase().replace(" ", "_"));
-        Long amount = Long.valueOf(request.get("amount").toString());
-
-        // Handle Free tier (0 amount) directly
-        if (amount <= 0) {
-            subscriptionService.upgradePlan(user.getId(), targetTier);
-            return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Plan upgraded to Free successfully",
-                "is_free", true
-            ));
+        
+        // Use the new pro-rated service logic
+        PaymentOrder paymentOrder = paymentService.createOrder(user, targetTier);
+        
+        // Handle cases where pro-rating results in 1 INR (essentially free or already covered)
+        if (paymentOrder.getAmount() <= 100) { // 100 paise = 1 INR
+            // If the adjustment makes it nearly free, we could potentially just upgrade them, 
+            // but for tracking, we still create a 1 INR order or handle as free.
+            // Let's stick to the order flow if amount > 0.
         }
 
-        PaymentOrder paymentOrder = paymentService.createOrder(user, targetTier, amount);
-        
         return ResponseEntity.ok(Map.of(
             "order_id", paymentOrder.getRazorpayOrderId(),
             "amount", paymentOrder.getAmount(),
             "currency", "INR",
             "key_id", razorpayKeyId
+        ));
+    }
+
+    @GetMapping("/preview-upgrade/{tier}")
+    public ResponseEntity<Map<String, Object>> previewUpgrade(@PathVariable String tier) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        
+        SubscriptionTier targetTier = SubscriptionTier.valueOf(tier.toUpperCase().replace(" ", "_"));
+        long proRatedPrice = paymentService.calculatePreviewPrice(user, targetTier);
+        double originalPrice = targetTier.getPriceInInr();
+        double discount = originalPrice - proRatedPrice;
+
+        return ResponseEntity.ok(Map.of(
+            "targetTier", targetTier.name(),
+            "originalPrice", originalPrice,
+            "proRatedPrice", proRatedPrice,
+            "discountApplied", discount,
+            "currency", "INR"
         ));
     }
 

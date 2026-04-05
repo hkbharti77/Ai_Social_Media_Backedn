@@ -3,9 +3,8 @@ package com.aiplatform.controller;
 import com.aiplatform.model.PricingTier;
 import com.aiplatform.service.PricingService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -19,5 +18,11 @@ public class PricingController {
     @GetMapping
     public List<PricingTier> getPricingTiers() {
         return pricingService.getAllTiers();
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public PricingTier updatePricingTier(@PathVariable Long id, @RequestBody PricingTier tier) {
+        return pricingService.updateTier(id, tier);
     }
 }

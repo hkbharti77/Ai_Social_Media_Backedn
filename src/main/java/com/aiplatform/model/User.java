@@ -44,6 +44,40 @@ public class User {
     private Double monthlyCredits = 10.0;
 
     @Builder.Default
+    @Column(name = "bonus_credits")
+    private Double bonusCredits = 0.0;
+
+    @Column(name = "referral_code", unique = true)
+    private String referralCode;
+
+    @Column(name = "referred_by")
+    private String referredBy;
+
+    @Builder.Default
+    @Column(name = "daily_ads_viewed")
+    private Integer dailyAdsViewed = 0;
+
+    @Column(name = "last_ad_viewed_at")
+    private LocalDateTime lastAdViewedAt;
+
+    @Column(name = "last_ad_started_at")
+    private LocalDateTime lastAdStartedAt;
+
+    @Column(name = "registration_ip")
+    private String registrationIp;
+
+    @Column(name = "device_fingerprint")
+    private String deviceFingerprint;
+
+    @Builder.Default
+    @Column(name = "is_fraud_flagged")
+    private Boolean isFraudFlagged = false;
+
+    @Builder.Default
+    @Column(name = "referral_status")
+    private String referralStatus = "PENDING";
+
+    @Builder.Default
     @Column(name = "daily_credits_used")
     private Double dailyCreditsUsed = 0.0;
 
@@ -90,4 +124,15 @@ public class User {
     @Builder.Default
     @Column(name = "stored_videos_count")
     private Integer storedVideosCount = 0;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
+    @Builder.Default
+    @Column(name = "login_count")
+    private Long loginCount = 0L;
+
+    @Builder.Default
+    @Column(name = "total_usage_minutes")
+    private Long totalUsageMinutes = 0L;
 }

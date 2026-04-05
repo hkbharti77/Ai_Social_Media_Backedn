@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
+import java.util.List;
 
 @Entity
 @Table(name = "posts")
@@ -23,11 +24,22 @@ public class Post {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
     @Column(columnDefinition = "TEXT")
     private String caption;
 
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
+
+    @Column(name = "video_url", columnDefinition = "TEXT")
+    private String videoUrl;
 
     @Column(columnDefinition = "TEXT")
     private String hashtags;
@@ -73,6 +85,24 @@ public class Post {
     private String carouselContent; // Stores a JSON-serialized list of slides for carousels
 
     @Builder.Default
+    @Column(name = "is_story")
+    private Boolean isStory = false;
+
+    @Builder.Default
+    @Column(name = "is_poll")
+    private Boolean isPoll = false;
+
+    @Builder.Default
+    @Column(name = "is_reel")
+    private Boolean isReel = false;
+
+    @Column(name = "video_script", columnDefinition = "TEXT")
+    private String videoScript; // Stores AI-generated reel script and scene details
+
+    @Column(name = "poll_content", columnDefinition = "TEXT")
+    private String pollContent; // JSON-serialized poll structure
+
+    @Builder.Default
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -95,4 +125,7 @@ public class Post {
     /** Tracks when this post was last auto-recycled to prevent spam reposts. */
     @Column(name = "last_recycled_at")
     private LocalDateTime lastRecycledAt;
+
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Comment> comments;
 }

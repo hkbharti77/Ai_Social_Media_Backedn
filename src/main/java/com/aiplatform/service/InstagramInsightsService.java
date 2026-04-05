@@ -39,7 +39,8 @@ public class InstagramInsightsService {
         try {
             accessToken = encryptionUtils.decrypt(igAccount.getEncryptedAccessToken());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to decrypt access token");
+            logger.error("❌ [InstagramInsights] Failed to decrypt access token for user {}. The encryption key might have changed. Please re-link the account.", user.getEmail());
+            return mockBestTimeData();
         }
 
         // --- Fetch follower growth insights ---

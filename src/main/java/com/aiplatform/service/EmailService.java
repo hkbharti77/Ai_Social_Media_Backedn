@@ -35,7 +35,7 @@ public class EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             
-            helper.setFrom(fromEmail, "VaniAI Notifications");
+            helper.setFrom(fromEmail, "GyanVaniAi Notifications");
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
@@ -49,25 +49,21 @@ public class EmailService {
 
     public void sendWelcomeEmail(User user) {
         String htmlBody = EmailTemplateUtils.getWelcomeEmailHtml(user);
-        sendHtmlMessage(user.getEmail(), "\u2728 Welcome to VaniAI - System Identification Complete!", htmlBody);
+        sendHtmlMessage(user.getEmail(), "\u2728 Welcome to GyanVaniAi - Setup Complete!", htmlBody);
     }
 
     public void sendLowCreditAlert(User user) {
         String htmlBody = EmailTemplateUtils.getLowCreditAlertHtml(user);
-        sendHtmlMessage(user.getEmail(), "\u26a0\ufe0f Critical Capacity Alert: VaniAI Credits Running Low", htmlBody);
+        sendHtmlMessage(user.getEmail(), "\u26a0\ufe0f Critical Capacity Alert: GyanVaniAi Credits Running Low", htmlBody);
     }
 
     public void sendPlanExpiredEmail(User user) {
         String htmlBody = EmailTemplateUtils.getPlanExpiredHtml(user);
-        sendHtmlMessage(user.getEmail(), "\u231b System Notice: Your VaniAI Subscription has Expired", htmlBody);
+        sendHtmlMessage(user.getEmail(), "\u231b System Notice: Your GyanVaniAi Subscription has Expired", htmlBody);
     }
 
     public void sendVerificationEmail(User user, String token) {
-        String verificationUrl = "http://localhost:8080/api/v1/auth/verify?token=" + token;
-        String text = "Hi " + user.getFullName() + ",\n\n" +
-                "Please verify your email by clicking the link below:\n" +
-                verificationUrl + "\n\n" +
-                "If you didn't create an account, please ignore this email.";
-        sendSimpleMessage(user.getEmail(), "Verify your VaniAI Account", text);
+        String htmlBody = EmailTemplateUtils.getVerificationEmailHtml(user, token);
+        sendHtmlMessage(user.getEmail(), "Verify your GyanVaniAi Account", htmlBody);
     }
 }

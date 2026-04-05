@@ -45,9 +45,12 @@ public class PaymentService {
     }
 
     @Transactional
-    public PaymentOrder createOrder(User user, SubscriptionTier targetTier, Long amountInInr) throws RazorpayException {
+    public PaymentOrder createOrder(User user, SubscriptionTier targetTier) throws RazorpayException {
+        // Calculate pro-rated amount (Hoststar style)
+        long finalAmountInInr = subscriptionService.calculateUpgradePrice(user, targetTier);
+        
         JSONObject orderRequest = new JSONObject();
-        orderRequest.put("amount", amountInInr * 100); // amount in the smallest currency unit (paise)
+        orderRequest.put("amount", finalAmountInInr * 100); // amount in the smallest currency unit (paise)
         orderRequest.put("currency", "INR");
         orderRequest.put("receipt", "receipt_user_" + user.getId() + "_" + System.currentTimeMillis());
 
@@ -57,13 +60,17 @@ public class PaymentService {
                 .razorpayOrderId(razorpayOrder.get("id"))
                 .user(user)
                 .targetTier(targetTier)
-                .amount(amountInInr * 100)
+                .amount(finalAmountInInr * 100)
                 .currency("INR")
                 .status("CREATED")
                 .createdAt(LocalDateTime.now())
                 .build();
 
         return paymentOrderRepository.save(paymentOrder);
+    }
+
+    public long calculatePreviewPrice(User user, SubscriptionTier targetTier) {
+        return subscriptionService.calculateUpgradePrice(user, targetTier);
     }
 
     @Transactional

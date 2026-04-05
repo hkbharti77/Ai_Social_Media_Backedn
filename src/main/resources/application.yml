@@ -3,8 +3,8 @@ spring:
     name: ai-social-media-automation
   datasource:
     url: jdbc:postgresql://localhost:5432/ai_social_media
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -17,14 +17,14 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
 
   mail:
     host: ${SMTP_SERVER:smtp.gmail.com}
     port: ${SMTP_PORT:587}
-    username: ${SMTP_USERNAME:ewardmacllum@gmail.com}
-    password: ${SMTP_PASSWORD:vnyb lida ctqj gnhs}
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
     properties:
       mail:
         smtp:
@@ -38,16 +38,16 @@ spring:
   cloud:
     aws:
       credentials:
-        access-key: ${AWS_ACCESS_KEY_ID:AKIARW4W75AUN4T35HPR}
-        secret-key: ${AWS_SECRET_ACCESS_KEY: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}
+        access-key: ${AWS_ACCESS_KEY_ID}
+        secret-key: ${AWS_SECRET_ACCESS_KEY}
       region:
         static: ${AWS_REGION:eu-north-1}
       s3:
-        bucket: ${AWS_S3_BUCKET_NAME:hkbharti77}
+        bucket: ${AWS_S3_BUCKET_NAME}
   ai:
     google:
       genai:
-        api-key: ${GEMINI_API_KEY:AQ.Ab8RN6L3HHO4Jlw_QNuc9bFwDKMJ7imzq9Ok2p4KV08qs14Udw}
+        api-key: ${GEMINI_API_KEY}
         chat:
           options:
             model: gemini-2.5-flash-lite
@@ -72,6 +72,8 @@ mail:
 
 
 app:
+  security:
+    owner-email: ${OWNER_EMAIL:hkbharti77@gmail.com}
   use-s3: ${USE_S3:true}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   scheduling:
@@ -88,31 +90,31 @@ app:
 
 fb:
   app:
-    id: ${FB_APP_ID:1953515308861699}
-    secret: ${FB_APP_SECRET:f42026af9d2a9a5a5c87025ab21c68cb}
-    access-token: ${FB_ACCESS_TOKEN:EAAbwtjoMSQMBRHYkVWoqzRfdWbekXCLoH89AmAzKoLS03IRj3tkwG2MiZCKmGQBiJuiRK3qH8Dce4W1cJxzkwEZCDKJxKjq9qIDnrsvjitsnZBkXC4HmzlRmofaxFxwCJrbgFQK4rYVxztxXqr4NwWMaw4zO8RxaaNVxX1ZCNfjCOU1v86CWB1kScbWRWkCdSUF6ZA8dN3ATDAU5F20HaZC7eFvEQSPW1JX1ymohXsEwrj7cYjA2ovD69D6BdT8DCqmQ9ooQCw4Wu0Q1WODsSOdOrq}
+    id: ${FB_APP_ID}
+    secret: ${FB_APP_SECRET}
+    access-token: ${FB_ACCESS_TOKEN}
   redirect:
     uri: ${FB_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/facebook}
 
 linkedin:
   client:
-    id: ${LINKEDIN_CLIENT_ID:86j6w9tvmvqbe6}
-    secret: ${LINKEDIN_CLIENT_SECRET:WPL_AP1.ueKMu9OQt8tKzObi.rcTfgg==}
+    id: ${LINKEDIN_CLIENT_ID}
+    secret: ${LINKEDIN_CLIENT_SECRET}
   redirect:
     uri: ${LINKEDIN_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/linkedin}
 
 encryption:
-  secret: ${ENCRYPTION_SECRET:abcdefghijklmnop} # Must be 16 chars for AES
+  secret: ${ENCRYPTION_SECRET} # Must be 16 chars for AES
 
 razorpay:
   key:
-    id: ${RAZORPAY_KEY_ID:rzp_test_SWu2rSozUrKBjd}
-    secret: ${RAZORPAY_KEY_SECRET:L2XegX44o5jbIS8ndZQDSWr5}
+    id: ${RAZORPAY_KEY_ID}
+    secret: ${RAZORPAY_KEY_SECRET}
   webhook:
-    secret: ${RAZORPAY_WEBHOOK_SECRET:gyanvaniai}
+    secret: ${RAZORPAY_WEBHOOK_SECRET}
 
 jwt:
-  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  secret: ${JWT_SECRET}
   expiration: 900000 # 15 minutes
   refresh-token:
     expiration: 604800000 # 7 days
@@ -126,7 +128,7 @@ logging:
 
 x:
   client:
-    id: ${X_CLIENT_ID:Y0t0LXJXb0pPSzZqNEVPeDJLT3M6MTpjaQ}
-    secret: ${X_CLIENT_SECRET:j57N0Ne4oU5YRs62rHnhxOAV1c7PehhlhJbaAyao4LTO3AoL-h}
+    id: ${X_CLIENT_ID}
+    secret: ${X_CLIENT_SECRET}
   redirect:
     uri: ${X_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/x}

@@ -25,54 +25,57 @@ public class PricingService {
     @PostConstruct
     @Transactional
     public void initDefaultTiers() {
-        if (pricingRepository.count() == 0) {
-            log.info("Initializing default Enterprise Pricing Tiers (INR)...");
+        log.info("Checking and Syncing Enterprise Pricing Tiers (INR)...");
 
-            pricingRepository.save(PricingTier.builder()
-                    .name("Free")
-                    .priceInr("₹0")
-                    .priceAmount(0L)
-                    .description("Experience the magic of AI content creation.")
-                    .monthlyCredits(10.0)
-                    .dailyLimit(2)
-                    .features(Arrays.asList("10 AI Credits / month", "2 Posts per day", "Standard AI Model"))
-                    .popular(false)
-                    .build());
+        syncTier("Free", "₹0", 0L, "Experience the magic of AI content creation.", 10.0, 2, 
+                Arrays.asList("10 AI Credits / month", "2 Posts per day", "Standard AI Model"), false, 0);
 
-            pricingRepository.save(PricingTier.builder()
-                    .name("Standard")
-                    .priceInr("₹999")
-                    .priceAmount(999L)
-                    .description("Elevate your social presence with consistent AI output.")
-                    .monthlyCredits(100.0)
-                    .dailyLimit(20)
-                    .features(Arrays.asList("100 AI Credits / month", "20 Posts per day", "Brand Voice Training"))
-                    .popular(false)
-                    .build());
+        syncTier("Standard", "₹499", 499L, "Elevate your social presence with consistent AI output.", 100.0, 20, 
+                Arrays.asList("100 AI Credits / month", "20 Posts per day", "Brand Voice Training"), false, 1);
 
-            pricingRepository.save(PricingTier.builder()
-                    .name("Pro")
-                    .priceInr("₹3,999")
-                    .priceAmount(3999L)
-                    .description("Scale your brand with high-volume AI intelligence.")
-                    .monthlyCredits(1000.0)
-                    .dailyLimit(-1)
-                    .features(Arrays.asList("1,000 AI Credits / month", "Unlimited Daily Posts", "Premium Imagen 3 Model"))
-                    .popular(true)
-                    .build());
+        syncTier("Pro", "₹1,499", 1499L, "Scale your brand with high-volume AI intelligence.", 1000.0, -1, 
+                Arrays.asList("1,000 AI Credits / month", "Unlimited Daily Posts", "Premium AI Architecture"), true, 2);
 
-            pricingRepository.save(PricingTier.builder()
-                    .name("Super Pro")
-                    .priceInr("₹7,999")
-                    .priceAmount(7999L)
-                    .description("Enterprise-grade power for massive content operations.")
-                    .monthlyCredits(20000.0)
-                    .dailyLimit(-1) 
-                    .features(Arrays.asList("20,000 AI Credits / month", "Unlimited Daily Posts", "Ultra-HD Image Exports"))
-                    .popular(false)
-                    .build());
+        syncTier("Super Pro", "₹2,999", 2999L, "Enterprise-grade power for massive content operations.", 20000.0, -1, 
+                Arrays.asList("20,000 AI Credits / month", "Unlimited Daily Posts", "Ultra-HD Image Exports"), false, 3);
 
-            log.info("Pricing Initialization complete.");
-        }
+        log.info("Pricing Synchronization complete.");
+    }
+
+    private void syncTier(String name, String priceInr, Long priceAmount, String description, 
+                          Double monthlyCredits, Integer dailyLimit, List<String> features, Boolean popular, Integer ordinal) {
+        PricingTier tier = pricingRepository.findAll().stream()
+                .filter(t -> t.getName().equalsIgnoreCase(name))
+                .findFirst()
+                .orElse(new PricingTier());
+
+        tier.setName(name);
+        tier.setPriceInr(priceInr);
+        tier.setPriceAmount(priceAmount);
+        tier.setDescription(description);
+        tier.setMonthlyCredits(monthlyCredits);
+        tier.setDailyLimit(dailyLimit);
+        tier.setFeatures(features);
+        tier.setPopular(popular);
+        tier.setTierOrdinal(ordinal);
+
+        pricingRepository.save(tier);
+    }
+
+    @Transactional
+    public PricingTier updateTier(Long id, PricingTier update) {
+        return pricingRepository.findById(id)
+                .map(existing -> {
+                    if (update.getPriceInr() != null) existing.setPriceInr(update.getPriceInr());
+                    if (update.getPriceAmount() != null) existing.setPriceAmount(update.getPriceAmount());
+                    if (update.getDescription() != null) existing.setDescription(update.getDescription());
+                    if (update.getMonthlyCredits() != null) existing.setMonthlyCredits(update.getMonthlyCredits());
+                    if (update.getDailyLimit() != null) existing.setDailyLimit(update.getDailyLimit());
+                    if (update.getMaxProfiles() != null) existing.setMaxProfiles(update.getMaxProfiles());
+                    if (update.getPopular() != null) existing.setPopular(update.getPopular());
+                    if (update.getFeatures() != null) existing.setFeatures(update.getFeatures());
+                    return pricingRepository.save(existing);
+                })
+                .orElseThrow(() -> new RuntimeException("Pricing Tier not found: " + id));
     }
 }

@@ -10,7 +10,11 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class BusinessProfile {
+public class BusinessProfile implements Cloneable {
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -124,6 +128,26 @@ public class BusinessProfile {
     @Column(name = "use_ai_best_time")
     @Builder.Default
     private Boolean useAiBestTime = false;
+
+    // --- Brand Voice Training Layer ---
+    
+    @ElementCollection
+    @CollectionTable(name = "profile_voice_samples", joinColumns = @JoinColumn(name = "profile_id"))
+    @Column(name = "sample_text", length = 2000)
+    private java.util.List<String> brandVoiceSamples;
+
+    @ElementCollection
+    @CollectionTable(name = "profile_voice_images", joinColumns = @JoinColumn(name = "profile_id"))
+    @Column(name = "image_url")
+    private java.util.List<String> brandVoiceImageUrls;
+
+    @Column(name = "brand_style_dna", length = 2000)
+    private String brandStyleDna;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "default_voice_mode")
+    @Builder.Default
+    private BrandVoiceMode defaultVoiceMode = BrandVoiceMode.STYLE_DNA;
 
     @Embeddable
     @Getter

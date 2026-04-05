@@ -33,4 +33,13 @@ public class AiUsageLog {
     @Builder.Default
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(columnDefinition = "TEXT")
+    private String prompt;
+
+    @Column(name = "result_url")
+    private String resultUrl; // For image/video generation
+
+    @Column(name = "feature_name")
+    private String featureName; // e.g., "Post Generator", "Meme"
 }

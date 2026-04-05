@@ -1,6 +1,7 @@
 package com.aiplatform.service;
 
 import com.aiplatform.dto.ContentGenerationDtos.GeneratedPost;
+import com.aiplatform.dto.ContentGenerationDtos.PostGenerationRequest;
 import com.aiplatform.model.BusinessProfile;
 import com.aiplatform.model.Post;
 import com.aiplatform.model.PostStatus;
@@ -109,7 +110,13 @@ public class AutoPostService {
         logger.info("🤖 [AutoPost] Generating {} draft for user {} (business: {})",
                 slotType, user.getEmail(), bp.getBusinessName());
 
-        GeneratedPost generated = aiContentService.generatePost(bp, command, user.getId(), AUTO_POST_MODEL);
+        PostGenerationRequest request = new PostGenerationRequest();
+        request.setCommand(command);
+        request.setModelId(AUTO_POST_MODEL);
+        request.setAspectRatio("1:1");
+        
+        GeneratedPost generated = aiContentService.generatePost(bp, command, user.getId(), AUTO_POST_MODEL, request);
+        
 
         Post post = Post.builder()
                 .user(user)

@@ -65,7 +65,7 @@ public class FacebookReviewService {
                 .stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Business Profile not found"));
         
-        return aiContentService.generateReviewReply(bp.getBusinessName(), reviewText, rating);
+        return aiContentService.generateReviewReply(bp.getBusinessName(), reviewText, rating, user.getId());
     }
 
     public void postReply(User user, String reviewId, String replyText) {
@@ -94,7 +94,8 @@ public class FacebookReviewService {
         try {
             return encryptionUtils.decrypt(encryptedToken);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to decrypt access token");
+            logger.error("❌ [FacebookReview] Failed to decrypt access token. The encryption key might have changed. Please re-link account.");
+            return null;
         }
     }
 }

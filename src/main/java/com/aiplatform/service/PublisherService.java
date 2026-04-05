@@ -6,6 +6,10 @@ import com.aiplatform.model.SocialAccount;
 import com.aiplatform.repository.PostRepository;
 import com.aiplatform.repository.SocialAccountRepository;
 import com.aiplatform.security.EncryptionUtils;
+import com.aiplatform.dto.ContentGenerationDtos.CarouselResponse;
+import com.aiplatform.dto.ContentGenerationDtos.CarouselSlide;
+import com.aiplatform.dto.PollDtos.PollData;
+import com.aiplatform.dto.PollDtos.PollOption;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -23,9 +27,11 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class PublisherService {
@@ -39,6 +45,9 @@ public class PublisherService {
 
     @Autowired
     private EncryptionUtils encryptionUtils;
+    
+    @Autowired
+    private PdfService pdfService;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -57,19 +66,48 @@ public class PublisherService {
                     post.getPlatform().equalsIgnoreCase("BOTH") || // legacy
                     post.getPlatform().equalsIgnoreCase(platform)) {
                     
-                    String token = encryptionUtils.decrypt(account.getEncryptedAccessToken());
+                    String token;
+                    try {
+                        token = encryptionUtils.decrypt(account.getEncryptedAccessToken());
+                    } catch (Exception e) {
+                        logger.error("❌ [Publisher] Failed to decrypt token for platform {}. Account may need to be re-linked.", platform);
+                        post.setStatus(PostStatus.FAILED);
+                        post.setFailureReason("Social account session expired or encryption key mismatch. Please re-link your social accounts.");
+                        postRepository.save(post);
+                        continue; // Skip this platform and move to next
+                    }
                     
                     if (platform.equals("FACEBOOK")) {
-                        publishToFacebook(post, account.getPageId(), token);
+                        if (Boolean.TRUE.equals(post.getIsStory())) {
+                            publishToFacebookStory(post, account.getPageId(), token);
+                        } else if (Boolean.TRUE.equals(post.getIsReel())) {
+                            publishReelToFacebook(post, account.getPageId(), token);
+                        } else {
+                            publishToFacebook(post, account.getPageId(), token);
+                        }
                         published = true;
                     } else if (platform.equals("INSTAGRAM")) {
-                        publishToInstagram(post, account.getIgBusinessAccountId(), token);
+                        if (Boolean.TRUE.equals(post.getIsStory())) {
+                            publishToInstagramStory(post, account.getIgBusinessAccountId(), token);
+                        } else if (Boolean.TRUE.equals(post.getIsReel())) {
+                            publishReelToInstagram(post, account.getIgBusinessAccountId(), token);
+                        } else {
+                            publishToInstagram(post, account.getIgBusinessAccountId(), token);
+                        }
                         published = true;
                     } else if (platform.equals("LINKEDIN")) {
-                        publishToLinkedIn(post, account.getPageId(), token);
+                        if (Boolean.TRUE.equals(post.getIsPoll())) {
+                            publishPollToLinkedIn(post, account.getPageId(), token);
+                        } else {
+                            publishToLinkedIn(post, account.getPageId(), token);
+                        }
                         published = true;
                     } else if (platform.equals("X")) {
-                        publishToX(post, token);
+                        if (Boolean.TRUE.equals(post.getIsPoll())) {
+                            publishPollToX(post, token);
+                        } else {
+                            publishToX(post, token);
+                        }
                         published = true;
                     }
                 }
@@ -92,37 +130,78 @@ public class PublisherService {
     }
 
     private void publishToFacebook(Post post, String pageId, String accessToken) {
-        String url = "https://graph.facebook.com/v19.0/" + pageId + "/photos";
-        
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("url", post.getImageUrl());
-        
         String hashtags = post.getHashtags() != null ? post.getHashtags() : "";
         String fullCaption = post.getCaption();
         if (!hashtags.isEmpty()) {
             fullCaption += "\n\n" + hashtags;
         }
-        body.add("caption", fullCaption);
-        body.add("access_token", accessToken);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        if (Boolean.TRUE.equals(post.getIsCarousel()) && post.getCarouselContent() != null) {
+            try {
+                CarouselResponse carousel = objectMapper.readValue(post.getCarouselContent(), CarouselResponse.class);
+                List<String> mediaFbids = new ArrayList<>();
 
-        HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<>(body, headers);
-        
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = restTemplate.postForObject(url, requestEntity, Map.class);
-            logger.info("Facebook API Response: {}", response);
-            
-            if (response != null && response.containsKey("id")) {
-                post.setExternalPostId((String) response.get("id"));
-            } else {
-                throw new RuntimeException("Facebook response missing 'id': " + response);
+                // 1. Upload each image as unpublished
+                for (CarouselSlide slide : carousel.getSlides()) {
+                    String photoUrl = "https://graph.facebook.com/v19.0/" + pageId + "/photos";
+                    MultiValueMap<String, String> photoBody = new LinkedMultiValueMap<>();
+                    photoBody.add("url", slide.getImageUrl());
+                    photoBody.add("published", "false");
+                    photoBody.add("access_token", accessToken);
+                    
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> photoResp = restTemplate.postForObject(photoUrl, photoBody, Map.class);
+                    if (photoResp != null && photoResp.containsKey("id")) {
+                        mediaFbids.add((String) photoResp.get("id"));
+                    }
+                }
+
+                // 2. Publish as a multi-photo post
+                String feedUrl = "https://graph.facebook.com/v19.0/" + pageId + "/feed";
+                Map<String, Object> feedBody = new HashMap<>();
+                feedBody.put("message", fullCaption);
+                feedBody.put("access_token", accessToken);
+                
+                List<Map<String, String>> attachedMedia = mediaFbids.stream()
+                        .map(id -> Map.of("media_fbid", id))
+                        .collect(Collectors.toList());
+                feedBody.put("attached_media", attachedMedia);
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = restTemplate.postForObject(feedUrl, feedBody, Map.class);
+                if (response != null && response.containsKey("id")) {
+                    post.setExternalPostId((String) response.get("id"));
+                    logger.info("\ud83d\udcf1 Facebook Multi-Photo Post Successful: {}", post.getExternalPostId());
+                } else {
+                    throw new RuntimeException("Facebook Multi-Photo response missing ID.");
+                }
+            } catch (Exception e) {
+                logger.error("Facebook Carousel Error: {}", e.getMessage());
+                throw new RuntimeException("Facebook Carousel Publishing failed.", e);
             }
-        } catch (Exception e) {
-            logger.error("Facebook API error while publishing: {}", e.getMessage());
-            throw e;
+        } else {
+            // Single Image Post (Standard)
+            String url = "https://graph.facebook.com/v19.0/" + pageId + "/photos";
+            
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("url", post.getImageUrl());
+            body.add("caption", fullCaption);
+            body.add("access_token", accessToken);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<>(body, headers);
+            
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = restTemplate.postForObject(url, requestEntity, Map.class);
+                if (response != null && response.containsKey("id")) {
+                    post.setExternalPostId((String) response.get("id"));
+                }
+            } catch (Exception e) {
+                logger.error("Facebook API error: {}", e.getMessage());
+                throw e;
+            }
         }
     }
 
@@ -181,141 +260,221 @@ public class PublisherService {
                 logger.info("🐦 Successfully published single Tweet (id={})", post.getExternalPostId());
             }
         } catch (Exception e) {
-            logger.error("❌ X/Twitter API error while publishing: {}", e.getMessage());
+            logger.error(" X/Twitter API error while publishing: {}", e.getMessage());
             throw new RuntimeException("X publishing failed: " + e.getMessage(), e);
         }
     }
 
     private void publishToInstagram(Post post, String igId, String accessToken) {
-        // Step 1: Create media container
-        String containerUrl = "https://graph.facebook.com/v19.0/" + igId + "/media";
-        
-        MultiValueMap<String, Object> containerBody = new LinkedMultiValueMap<>();
-        containerBody.add("image_url", post.getImageUrl());
-        containerBody.add("caption", post.getCaption() + "\n\n" + post.getHashtags());
-        containerBody.add("access_token", accessToken);
+        if (Boolean.TRUE.equals(post.getIsCarousel()) && post.getCarouselContent() != null) {
+            try {
+                CarouselResponse carousel = objectMapper.readValue(post.getCarouselContent(), CarouselResponse.class);
+                List<String> childIds = new ArrayList<>();
 
+                // Step 1: Create Image Containers for each slide
+                for (CarouselSlide slide : carousel.getSlides()) {
+                    String containerUrl = "https://graph.facebook.com/v19.0/" + igId + "/media";
+                    MultiValueMap<String, Object> slideBody = new LinkedMultiValueMap<>();
+                    slideBody.add("image_url", slide.getImageUrl());
+                    slideBody.add("is_carousel_item", "true");
+                    slideBody.add("access_token", accessToken);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, containerBody, Map.class);
-        String creationId = (String) containerResponse.get("id");
-        
-        if (creationId == null) {
-            throw new RuntimeException("Failed to create Instagram media container. Response: " + containerResponse);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> slideResp = restTemplate.postForObject(containerUrl, slideBody, Map.class);
+                    if (slideResp == null || !slideResp.containsKey("id")) {
+                        throw new RuntimeException("Failed to create Instagram slide container.");
+                    }
+                    childIds.add((String) slideResp.get("id"));
+                }
+
+                // Step 2: Create Carousel Container
+                String rootContainerUrl = "https://graph.facebook.com/v19.0/" + igId + "/media";
+                MultiValueMap<String, Object> rootBody = new LinkedMultiValueMap<>();
+                rootBody.add("media_type", "CAROUSEL");
+                rootBody.add("caption", post.getCaption() + "\n\n" + post.getHashtags());
+                rootBody.add("children", String.join(",", childIds));
+                rootBody.add("access_token", accessToken);
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> rootResp = restTemplate.postForObject(rootContainerUrl, rootBody, Map.class);
+                if (rootResp == null || !rootResp.containsKey("id")) {
+                    throw new RuntimeException("Failed to create Instagram Carousel root container.");
+                }
+                String carouselId = (String) rootResp.get("id");
+
+                // Step 3: Wait and Publish
+                waitForMediaStatus(carouselId, accessToken);
+                
+                String publishUrl = "https://graph.facebook.com/v19.0/" + igId + "/media_publish";
+                MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
+                publishBody.add("creation_id", carouselId);
+                publishBody.add("access_token", accessToken);
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> finalResp = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+                post.setExternalPostId((String) finalResp.get("id"));
+                logger.info("\ud83c\udfa0 Instagram Carousel Successful: {}", post.getExternalPostId());
+
+            } catch (Exception e) {
+                logger.error("Instagram Carousel Error: {}", e.getMessage());
+                throw new RuntimeException("Instagram Carousel Publish failed.", e);
+            }
+        } else {
+            // STEP 1: Create media container
+            String containerUrl = "https://graph.facebook.com/v19.0/" + igId + "/media";
+            
+            MultiValueMap<String, Object> containerBody = new LinkedMultiValueMap<>();
+            containerBody.add("image_url", post.getImageUrl());
+            containerBody.add("caption", post.getCaption() + "\n\n" + post.getHashtags());
+            containerBody.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, containerBody, Map.class);
+            String creationId = (String) containerResponse.get("id");
+            
+            if (creationId == null) {
+                throw new RuntimeException("Failed to create Instagram media container.");
+            }
+
+            // STEP 2: Poll status
+            waitForMediaStatus(creationId, accessToken);
+
+            // STEP 3: Publish media
+            String publishUrl = "https://graph.facebook.com/v19.0/" + igId + "/media_publish";
+            MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
+            publishBody.add("creation_id", creationId);
+            publishBody.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+            post.setExternalPostId((String) publishResponse.get("id"));
         }
+    }
 
-        // Step 2: Poll for "FINISHED" status
-        // Images usually take 5-30 seconds to be ready for publishing
+    private void waitForMediaStatus(String creationId, String accessToken) {
         boolean isReady = false;
         int retries = 0;
-        int maxRetries = 10; // 10 * 5 seconds = 50 seconds max wait
+        int maxRetries = 12; // 60 seconds
         
         while (!isReady && retries < maxRetries) {
             try {
-                Thread.sleep(5000); // Wait 5 seconds
+                Thread.sleep(5000);
                 retries++;
                 
                 String statusUrl = "https://graph.facebook.com/v19.0/" + creationId + 
                                   "?fields=status_code&access_token=" + accessToken;
                 @SuppressWarnings("unchecked")
                 Map<String, Object> statusResponse = restTemplate.getForObject(statusUrl, Map.class);
-                String statusCode = (String) statusResponse.get("status_code");
+                String statusCode = statusResponse != null ? (String) statusResponse.get("status_code") : "UNKNOWN";
                 
-                logger.info("\ud83d\udcf8 [Instagram] Polling media {} - Status: {} (Attempt {})", creationId, statusCode, retries);
+                logger.info("\ud83d\udcf8 [Polling] Media {} Status: {}", creationId, statusCode);
                 
                 if ("FINISHED".equalsIgnoreCase(statusCode)) {
                     isReady = true;
                 } else if ("ERROR".equalsIgnoreCase(statusCode)) {
-                    throw new RuntimeException("Instagram media processing failed: " + statusResponse.get("status_message"));
+                    throw new RuntimeException("Media processing failed.");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException("Instagram polling interrupted", e);
+                throw new RuntimeException("Polling interrupted");
             }
         }
-
-        if (!isReady) {
-            throw new RuntimeException("Instagram media timed out after " + (maxRetries * 5) + " seconds.");
-        }
-
-        // Step 3: Publish media
-        String publishUrl = "https://graph.facebook.com/v19.0/" + igId + "/media_publish";
-        MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
-        publishBody.add("creation_id", creationId);
-        publishBody.add("access_token", accessToken);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishBody, Map.class);
-        
-        if (publishResponse != null && publishResponse.containsKey("id")) {
-            post.setExternalPostId((String) publishResponse.get("id"));
-            logger.info("\u2705 [Instagram] Successfully published post ID: {}", post.getExternalPostId());
-        } else {
-            throw new RuntimeException("Failed to finalize Instagram publish. Response: " + publishResponse);
-        }
+        if (!isReady) throw new RuntimeException("Media timed out.");
     }
 
     private void publishToLinkedIn(Post post, String personUrn, String accessToken) {
-        String url = "https://api.linkedin.com/v2/posts";
-        
-        // Prepare the caption with hashtags
         String hashtags = post.getHashtags() != null ? post.getHashtags() : "";
         String fullCaption = post.getCaption();
         if (!hashtags.isEmpty()) {
             fullCaption += "\n\n" + hashtags;
         }
 
-        String imageUrn = null;
-        if (post.getImageUrl() != null && !post.getImageUrl().isEmpty()) {
-            try {
+        if (Boolean.TRUE.equals(post.getIsCarousel()) && post.getCarouselContent() != null) {
+            publishLinkedInCarousel(post, personUrn, accessToken);
+        } else {
+            // Standard Single Image / Text Post
+            String imageUrn = null;
+            if (post.getImageUrl() != null && !post.getImageUrl().isEmpty()) {
                 imageUrn = uploadImageToLinkedIn(post.getImageUrl(), personUrn, accessToken);
-                logger.info("\u2705 [LinkedIn] Image uploaded successfully: {}", imageUrn);
-            } catch (Exception e) {
-                logger.error("\u274c [LinkedIn] Image upload failed, falling back to text-only: {}", e.getMessage());
             }
-        }
 
-        // LinkedIn 2024-01 Versionized API Body
-        Map<String, Object> body = new HashMap<>();
-        body.put("author", personUrn);
-        body.put("commentary", fullCaption);
-        body.put("visibility", "PUBLIC");
-        body.put("distribution", Map.of("feedDistribution", "MAIN_FEED"));
-        body.put("lifecycleState", "PUBLISHED");
-        body.put("isReshareDisabledByAuthor", false);
-        
-        if (imageUrn != null) {
-            body.put("content", Map.of(
-                "media", Map.of(
-                    "id", imageUrn,
-                    "altText", "AI Social Post"
-                )
-            ));
-        }
+            Map<String, Object> body = new HashMap<>();
+            body.put("author", personUrn);
+            body.put("commentary", fullCaption);
+            body.put("visibility", "PUBLIC");
+            body.put("distribution", Map.of("feedDistribution", "MAIN_FEED"));
+            body.put("lifecycleState", "PUBLISHED");
 
+            if (imageUrn != null) {
+                body.put("content", Map.of("media", Map.of("id", imageUrn, "altText", "AI Post")));
+            }
+
+            sendLinkedInPost(body, accessToken, post);
+        }
+    }
+
+    private void publishLinkedInCarousel(Post post, String personUrn, String accessToken) {
+        try {
+            CarouselResponse carousel = objectMapper.readValue(post.getCarouselContent(), CarouselResponse.class);
+            List<String> imageUrls = carousel.getSlides().stream().map(CarouselSlide::getImageUrl).collect(Collectors.toList());
+
+            // 1. Generate PDF
+            byte[] pdfBytes = pdfService.generateCarouselPdf(imageUrls);
+
+            // 2. Initialize Upload
+            String initUrl = "https://api.linkedin.com/v2/documents?action=initializeUpload";
+            Map<String, Object> initRequest = Map.of("initializeUploadRequest", Map.of("owner", personUrn));
+            
+            HttpHeaders headers = getLinkedInHeaders(accessToken);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(initRequest, headers);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> initResponse = restTemplate.postForObject(initUrl, entity, Map.class);
+            Map<String, Object> value = (Map<String, Object>) initResponse.get("value");
+            String uploadUrl = (String) value.get("uploadUrl");
+            String documentUrn = (String) value.get("document");
+
+            // 3. Upload bytes
+            HttpHeaders uploadHeaders = new HttpHeaders();
+            uploadHeaders.setBearerAuth(accessToken);
+            uploadHeaders.setContentType(MediaType.APPLICATION_PDF);
+            HttpEntity<byte[]> uploadEntity = new HttpEntity<>(pdfBytes, uploadHeaders);
+            restTemplate.put(uploadUrl, uploadEntity);
+
+            // 4. Publish
+            Map<String, Object> body = new HashMap<>();
+            body.put("author", personUrn);
+            body.put("commentary", post.getCaption());
+            body.put("visibility", "PUBLIC");
+            body.put("distribution", Map.of("feedDistribution", "MAIN_FEED"));
+            body.put("lifecycleState", "PUBLISHED");
+            // Correct format for LinkedIn Documents in 202401
+            body.put("content", Map.of("media", Map.of("id", documentUrn, "title", "AI Carousel")));
+
+            sendLinkedInPost(body, accessToken, post);
+            logger.info("\ud83d\udcb1 LinkedIn Document Carousel Successful: {}", post.getExternalPostId());
+        } catch (Exception e) {
+            logger.error("LinkedIn Carousel Error: {}", e.getMessage());
+            throw new RuntimeException("LinkedIn Carousel Publishing failed.");
+        }
+    }
+
+    private HttpHeaders getLinkedInHeaders(String accessToken) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(accessToken);
         headers.set("LinkedIn-Version", "202401");
         headers.set("X-Restli-Protocol-Version", "2.0.0");
+        return headers;
+    }
 
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-        
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = restTemplate.postForObject(url, request, Map.class);
-            logger.info("\u2705 [LinkedIn] Successfully published post to URN: {}", personUrn);
-            
-            if (response != null && response.containsKey("id")) {
-                post.setExternalPostId((String) response.get("id"));
-            }
-        } catch (org.springframework.web.client.HttpStatusCodeException e) {
-            String errorBody = e.getResponseBodyAsString();
-            logger.error("\u274c [LinkedIn] Final publish failed ({}) - Body: {}", e.getStatusCode(), errorBody);
-            throw new RuntimeException("LinkedIn publishing failed: " + errorBody, e);
-        } catch (Exception e) {
-            logger.error("\u274c [LinkedIn] Final publish error: {}", e.getMessage());
-            throw new RuntimeException("LinkedIn publishing failed: " + e.getMessage(), e);
+    private void sendLinkedInPost(Map<String, Object> body, String accessToken, Post post) {
+        String url = "https://api.linkedin.com/v2/posts";
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, getLinkedInHeaders(accessToken));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = restTemplate.postForObject(url, request, Map.class);
+        if (response != null && response.containsKey("id")) {
+            post.setExternalPostId((String) response.get("id"));
         }
     }
 
@@ -364,5 +523,222 @@ public class PublisherService {
         restTemplate.put(uploadUrl, uploadEntity);
 
         return imageUrn;
+    }
+
+    private void publishToInstagramStory(Post post, String igId, String accessToken) {
+        try {
+            // Step 1: Create Stories Media Container
+            String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("image_url", post.getImageUrl());
+            body.add("media_type", "STORIES");
+            body.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, body, Map.class);
+            String creationId = (String) containerResponse.get("id");
+
+            if (creationId == null) throw new RuntimeException("Failed to create IG Story container.");
+
+            waitForMediaStatus(creationId, accessToken);
+
+            // Step 2: Publish
+            String publishUrl = "https://graph.facebook.com/v21.0/" + igId + "/media_publish";
+            MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
+            publishBody.add("creation_id", creationId);
+            publishBody.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+            post.setExternalPostId((String) publishResponse.get("id"));
+            logger.info("📸 Instagram Story Published successfully: {}", post.getExternalPostId());
+        } catch (Exception e) {
+            logger.error("Instagram Story Error: {}", e.getMessage());
+            throw new RuntimeException("Instagram Story publishing failed", e);
+        }
+    }
+
+    private void publishToFacebookStory(Post post, String pageId, String accessToken) {
+        try {
+            // Step 1: Upload image or video as unpublished
+            if (post.getImageUrl() == null && post.getVideoUrl() != null) {
+                 // Logic for FB Stories Video if needed...
+                 // Fallback to Image for now as standard implementation
+            }
+
+            String uploadUrl = "https://graph.facebook.com/v21.0/" + pageId + "/photos";
+            MultiValueMap<String, Object> uploadBody = new LinkedMultiValueMap<>();
+            uploadBody.add("url", post.getImageUrl());
+            uploadBody.add("published", "false");
+            uploadBody.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> uploadResp = restTemplate.postForObject(uploadUrl, uploadBody, Map.class);
+            String photoId = (String) uploadResp.get("id");
+
+            if (photoId == null) throw new RuntimeException("Failed to upload FB story photo.");
+
+            // Step 2: Publish to Story
+            String storyUrl = "https://graph.facebook.com/v21.0/" + pageId + "/photo_stories";
+            MultiValueMap<String, Object> storyBody = new LinkedMultiValueMap<>();
+            storyBody.add("photo_id", photoId);
+            storyBody.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> storyResp = restTemplate.postForObject(storyUrl, storyBody, Map.class);
+            post.setExternalPostId((String) storyResp.get("id"));
+            logger.info("📖 Facebook Story Published successfully: {}", post.getExternalPostId());
+        } catch (Exception e) {
+            logger.error("Facebook Story Error: {}", e.getMessage());
+            throw new RuntimeException("Facebook Story publishing failed", e);
+        }
+    }
+
+    private void publishReelToInstagram(Post post, String igId, String accessToken) {
+        try {
+            // For Instagram Reels, we need a video_url. If it's missing, fail early.
+            if (post.getVideoUrl() == null || post.getVideoUrl().isEmpty()) {
+                throw new RuntimeException("Video URL is required to publish an Instagram Reel.");
+            }
+
+            // Step 1: Create Media Container for REELS
+            String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("video_url", post.getVideoUrl());
+            body.add("media_type", "REELS");
+            body.add("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
+            body.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, body, Map.class);
+            String creationId = (String) containerResponse.get("id");
+
+            if (creationId == null) throw new RuntimeException("Failed to create IG Reels container.");
+
+            // Step 2: Wait for video to process
+            waitForMediaStatus(creationId, accessToken);
+
+            // Step 3: Publish
+            String publishUrl = "https://graph.facebook.com/v21.0/" + igId + "/media_publish";
+            MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
+            publishBody.add("creation_id", creationId);
+            publishBody.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+            post.setExternalPostId((String) publishResponse.get("id"));
+            logger.info("🎥 Instagram Reel Published successfully: {}", post.getExternalPostId());
+        } catch (Exception e) {
+            logger.error("Instagram Reel Error: {}", e.getMessage());
+            throw new RuntimeException("Instagram Reel publishing failed", e);
+        }
+    }
+
+    private void publishReelToFacebook(Post post, String pageId, String accessToken) {
+        try {
+            if (post.getVideoUrl() == null || post.getVideoUrl().isEmpty()) {
+                throw new RuntimeException("Video URL is required to publish a Facebook Reel.");
+            }
+
+            // Facebook Page Reels endpoint (using Video API)
+            String uploadUrl = "https://graph.facebook.com/v21.0/" + pageId + "/video_reels";
+            
+            // Initialization Phase
+            MultiValueMap<String, Object> initBody = new LinkedMultiValueMap<>();
+            initBody.add("upload_phase", "start");
+            initBody.add("access_token", accessToken);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> initResp = restTemplate.postForObject(uploadUrl, initBody, Map.class);
+            if (initResp == null || !initResp.containsKey("video_id")) {
+                throw new RuntimeException("Failed to initialize Facebook Reel upload.");
+            }
+            String videoId = (String) initResp.get("video_id");
+
+            // For external URLs passing via API might require special handling or direct transfer, 
+            // Graph API supports file_url directly for videos in standard feed, but for reels, 
+            // usually you provide file_url with the finish phase or standard video upload.
+            // Using standard video endpoint as fallback for pages since video_reels has complex chunking.
+            String fallbackUrl = "https://graph.facebook.com/v21.0/" + pageId + "/videos";
+            MultiValueMap<String, Object> videoBody = new LinkedMultiValueMap<>();
+            videoBody.add("file_url", post.getVideoUrl());
+            videoBody.add("description", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
+            videoBody.add("access_token", accessToken);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> videoResp = restTemplate.postForObject(fallbackUrl, videoBody, Map.class);
+            post.setExternalPostId((String) videoResp.get("id"));
+            logger.info("🎬 Facebook Reel/Video Published successfully: {}", post.getExternalPostId());
+            
+        } catch (Exception e) {
+            logger.error("Facebook Reel Error: {}", e.getMessage());
+            throw new RuntimeException("Facebook Reel publishing failed", e);
+        }
+    }
+
+    private void publishPollToLinkedIn(Post post, String personUrn, String accessToken) {
+        try {
+            PollData pollData = objectMapper.readValue(post.getPollContent(), PollData.class);
+            Map<String, Object> body = new HashMap<>();
+            body.put("author", personUrn);
+            body.put("commentary", post.getCaption());
+            body.put("visibility", "PUBLIC");
+            body.put("distribution", Map.of("feedDistribution", "MAIN_FEED"));
+            body.put("lifecycleState", "PUBLISHED");
+
+            Map<String, Object> poll = new HashMap<>();
+            poll.put("question", pollData.getQuestion());
+            poll.put("options", pollData.getOptions().stream()
+                    .map(o -> Map.of("text", o.getText()))
+                    .collect(Collectors.toList()));
+            
+            // LinkedIn duration settings
+            String duration = "ONE_DAY";
+            if (pollData.getDurationMinutes() > 1440) duration = "THREE_DAYS";
+            if (pollData.getDurationMinutes() > 4320) duration = "SEVEN_DAYS";
+            if (pollData.getDurationMinutes() > 10080) duration = "TWO_WEEKS";
+            poll.put("settings", Map.of("duration", duration));
+
+            body.put("content", Map.of("poll", poll));
+
+            sendLinkedInPost(body, accessToken, post);
+            logger.info("📊 LinkedIn Poll Published successfully: {}", post.getExternalPostId());
+        } catch (Exception e) {
+            logger.error("LinkedIn Poll Error: {}", e.getMessage());
+            throw new RuntimeException("LinkedIn Poll publishing failed", e);
+        }
+    }
+
+    private void publishPollToX(Post post, String accessToken) {
+        String url = "https://api.twitter.com/2/tweets";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        try {
+            PollData pollData = objectMapper.readValue(post.getPollContent(), PollData.class);
+            Map<String, Object> body = new HashMap<>();
+            body.put("text", post.getCaption());
+            
+            Map<String, Object> poll = new HashMap<>();
+            poll.put("options", pollData.getOptions().stream()
+                    .map(PollOption::getText)
+                    .collect(Collectors.toList()));
+            poll.put("duration_minutes", pollData.getDurationMinutes());
+            
+            body.put("poll", poll);
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.postForObject(url, request, Map.class);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) response.get("data");
+            post.setExternalPostId((String) data.get("id"));
+            logger.info("📊 X Poll Published successfully: {}", post.getExternalPostId());
+        } catch (Exception e) {
+            logger.error("X Poll Error: {}", e.getMessage());
+            throw new RuntimeException("X Poll publishing failed", e);
+        }
     }
 }

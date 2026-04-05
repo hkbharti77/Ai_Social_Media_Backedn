@@ -19,14 +19,25 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     @Autowired
     private RateLimitingService rateLimitingService;
 
+    @Autowired
+    private org.springframework.core.env.Environment env;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String ip = request.getRemoteAddr();
         
-        // Simulation Bypass: Allow localhost to run 100-user stress tests
-        if ("127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
+        // Simulation Bypass: Allow localhost only in "dev" profile
+        boolean isLocalhost = "127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip);
+        boolean isDev = env.acceptsProfiles(org.springframework.core.env.Profiles.of("dev"));
+
+        if (isLocalhost && isDev) {
             filterChain.doFilter(request, response);
             return;
         }

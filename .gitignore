@@ -6,3 +6,4 @@ logs/
 *.json
 target/
 *.class
+.env

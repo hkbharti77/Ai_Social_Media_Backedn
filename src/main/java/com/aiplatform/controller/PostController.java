@@ -8,17 +8,23 @@ import com.aiplatform.repository.PostRepository;
 import com.aiplatform.service.AutoPostService;
 import com.aiplatform.service.EvergreenService;
 import com.aiplatform.util.SecurityUtils;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/posts")
@@ -68,31 +74,38 @@ public class PostController {
     }
 
     @PostMapping
-    public ResponseEntity<Post> createPost(@RequestBody Post post) {
+    public ResponseEntity<Post> createPost(@Valid @RequestBody Post post) {
         User user = SecurityUtils.getCurrentUser()
-                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user not found"));
+        
+        // SECURITY: Clear sensitive/injected fields
+        post.setId(null);
         post.setUser(user);
+        
         if (post.getStatus() == null) {
             post.setStatus(PostStatus.DRAFT);
         }
-        return ResponseEntity.ok(postRepository.save(post));
+        return ResponseEntity.status(HttpStatus.CREATED).body(postRepository.save(post));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Post> updatePost(@PathVariable Long id, @RequestBody Post postUpdates) {
+    public ResponseEntity<Post> updatePost(@PathVariable Long id, @Valid @RequestBody Post postUpdates) {
         Long userId = SecurityUtils.getCurrentUserId();
         Post existing = postRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Post not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found"));
 
         if (!existing.getUser().getId().equals(userId)) {
-             return ResponseEntity.status(404).build(); 
+             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access Denied: You do not own this post.");
         }
 
         existing.setCaption(postUpdates.getCaption());
         existing.setHashtags(postUpdates.getHashtags());
         existing.setImageUrl(postUpdates.getImageUrl());
+        existing.setVideoUrl(postUpdates.getVideoUrl());
         existing.setPlatform(postUpdates.getPlatform());
         existing.setStatus(postUpdates.getStatus());
+        existing.setIsReel(postUpdates.getIsReel());
+        existing.setVideoScript(postUpdates.getVideoScript());
         existing.setScheduledAt(postUpdates.getScheduledAt());
         if (postUpdates.getSlotType() != null) {
             existing.setSlotType(postUpdates.getSlotType());
@@ -104,6 +117,17 @@ public class PostController {
         }
         if (postUpdates.getCarouselContent() != null) {
             existing.setCarouselContent(postUpdates.getCarouselContent());
+        }
+
+        // Support Story & Poll updates
+        if (postUpdates.getIsStory() != null) {
+            existing.setIsStory(postUpdates.getIsStory());
+        }
+        if (postUpdates.getIsPoll() != null) {
+            existing.setIsPoll(postUpdates.getIsPoll());
+        }
+        if (postUpdates.getPollContent() != null) {
+            existing.setPollContent(postUpdates.getPollContent());
         }
 
         return ResponseEntity.ok(postRepository.save(existing));
@@ -142,12 +166,36 @@ public class PostController {
     @PostMapping("/generate-draft")
     public ResponseEntity<Post> generateDraftForCurrentUser(@RequestParam String slot) {
         User user = SecurityUtils.getCurrentUser()
-                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user not found"));
         Post created = autoPostService.generateDraftForUser(user, slot.toUpperCase(), null);
         if (created == null) {
             return ResponseEntity.ok().build();
         }
         return ResponseEntity.ok(created);
+    }
+
+    private LocalDateTime parseDate(String str) {
+        if (str == null || str.isBlank()) return null;
+        try {
+            // Try ISO with offset (e.g., 2026-04-05T03:30:00.000Z)
+            return ZonedDateTime.parse(str).toLocalDateTime();
+        } catch (Exception e) {
+            try {
+                // Try ISO with offset (alternate)
+                return OffsetDateTime.parse(str).toLocalDateTime();
+            } catch (Exception e2) {
+                try {
+                    // Try basic LocalDateTime (e.g., 2026-04-06T07:08:00)
+                    return LocalDateTime.parse(str);
+                } catch (Exception e3) {
+                    // Handle yyyy-MM-ddTHH:mm by appending :00
+                    if (str.length() == 16) {
+                        return LocalDateTime.parse(str + ":00");
+                    }
+                    throw e3;
+                }
+            }
+        }
     }
 
     @DeleteMapping("/{id}")
@@ -174,10 +222,38 @@ public class PostController {
             return ResponseEntity.status(404).build();
         }
         
-        post.setScheduledAt(LocalDateTime.parse(scheduledAt));
+        post.setScheduledAt(parseDate(scheduledAt));
         post.setStatus(PostStatus.SCHEDULED);
         
         return ResponseEntity.ok(postRepository.save(post));
+    }
+
+    @PostMapping("/{id}/recycle")
+    public ResponseEntity<Post> recyclePost(@PathVariable Long id, @RequestParam String scheduledAt) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        Post post = postRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Post not found"));
+
+        if (!post.getUser().getId().equals(userId)) {
+            return ResponseEntity.status(404).build();
+        }
+
+        // Clone the post as a new scheduled one
+        Post recycled = Post.builder()
+                .user(post.getUser())
+                .caption(post.getCaption())
+                .hashtags(post.getHashtags())
+                .imageUrl(post.getImageUrl())
+                .videoUrl(post.getVideoUrl())
+                .platform(post.getPlatform())
+                .status(PostStatus.SCHEDULED)
+                .scheduledAt(parseDate(scheduledAt))
+                .isEvergreen(false)
+                .autoScheduled(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+        
+        return ResponseEntity.ok(postRepository.save(recycled));
     }
 
     // ─────────────────────────────────────────────────────────────────

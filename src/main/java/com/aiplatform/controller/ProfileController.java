@@ -1,10 +1,12 @@
 package com.aiplatform.controller;
 
 import com.aiplatform.model.BusinessProfile;
+import com.aiplatform.model.BrandVoiceMode;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.BusinessProfileRepository;
 import com.aiplatform.repository.UserRepository;
 import com.aiplatform.service.AiBestTimeService;
+import com.aiplatform.service.AiContentService;
 import com.aiplatform.security.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -14,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.HashMap;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/v1/profile")
 public class ProfileController {
@@ -28,6 +29,9 @@ public class ProfileController {
     @Autowired
     private AiBestTimeService aiBestTimeService;
 
+    @Autowired
+    private AiContentService aiContentService;
+
     @GetMapping("/all")
     public ResponseEntity<java.util.List<BusinessProfile>> getAllProfiles() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -39,6 +43,13 @@ public class ProfileController {
     public ResponseEntity<Map<String, Object>> getProfile() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         User user = userRepository.findById(userDetails.getId()).get();
+
+        // Auto-generate referral code for legacy users
+        if (user.getReferralCode() == null || user.getReferralCode().isBlank()) {
+            user.setReferralCode(generateReferralCode(user.getEmail()));
+            userRepository.save(user);
+        }
+
         BusinessProfile bp = businessProfileRepository.findAllByUser(user).stream().findFirst().orElse(new BusinessProfile());
         
         Map<String, Object> response = new HashMap<>();
@@ -54,6 +65,9 @@ public class ProfileController {
         subMap.put("expiresAt", user.getSubscriptionExpiresAt());
         subMap.put("storedImagesCount", user.getStoredImagesCount() != null ? user.getStoredImagesCount() : 0);
         subMap.put("maxStoredImages", user.getSubscriptionTier() != null ? user.getSubscriptionTier().getMaxStoredImages() : 10);
+        subMap.put("referralCode", user.getReferralCode());
+        subMap.put("bonusCredits", user.getBonusCredits() != null ? user.getBonusCredits() : 0.0);
+        subMap.put("dailyAdsViewed", user.getDailyAdsViewed() != null ? user.getDailyAdsViewed() : 0);
         
         response.put("subscription", subMap);
         
@@ -105,7 +119,34 @@ public class ProfileController {
         existing.setReferenceImageUrl(profile.getReferenceImageUrl());
         existing.setNegativePrompt(profile.getNegativePrompt());
 
+        // Update Brand Voice Layers
+        if (profile.getBrandVoiceSamples() != null) existing.setBrandVoiceSamples(profile.getBrandVoiceSamples());
+        if (profile.getBrandVoiceImageUrls() != null) existing.setBrandVoiceImageUrls(profile.getBrandVoiceImageUrls());
+        if (profile.getDefaultVoiceMode() != null) existing.setDefaultVoiceMode(profile.getDefaultVoiceMode());
+
         return ResponseEntity.ok(businessProfileRepository.save(existing));
+    }
+
+    @PostMapping("/generate-dna")
+    public ResponseEntity<Map<String, String>> generateStyleDna() {
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findById(userDetails.getId()).get();
+        BusinessProfile bp = businessProfileRepository.findAllByUser(user).stream().findFirst()
+                .orElseThrow(() -> new RuntimeException("Profile not found"));
+
+        if (bp.getBrandVoiceSamples() == null || bp.getBrandVoiceSamples().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No samples found to analyze."));
+        }
+
+        // Call AI Service to analyze (Need to inject AiContentService or a dedicated VoiceService)
+        // For simplicity, let's assume we add this method to AiContentService
+        String dna = aiContentService.analyzeBrandVoice(bp.getBrandVoiceSamples(), user.getId());
+        bp.setBrandStyleDna(dna);
+        businessProfileRepository.save(bp);
+
+        Map<String, String> result = new HashMap<>();
+        result.put("dna", dna);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/suggest-best-time")
@@ -116,5 +157,19 @@ public class ProfileController {
                 .orElseThrow(() -> new RuntimeException("Profile not found"));
         
         return ResponseEntity.ok(aiBestTimeService.suggestTimes(bp));
+    }
+
+    private String generateReferralCode(String email) {
+        String base = email.split("@")[0].replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        if (base.length() > 10) base = base.substring(0, 10);
+        
+        String random;
+        String fullCode;
+        do {
+            random = java.util.UUID.randomUUID().toString().substring(0, 4);
+            fullCode = base + "_" + random;
+        } while (userRepository.existsByReferralCode(fullCode));
+        
+        return fullCode;
     }
 }

@@ -38,4 +38,5 @@ public class PricingTier {
     private List<String> features;
 
     private Boolean popular;
+    private Integer tierOrdinal;
 }

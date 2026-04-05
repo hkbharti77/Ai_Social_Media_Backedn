@@ -10,8 +10,12 @@ import com.lowagie.text.pdf.draw.LineSeparator;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.URL;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.awt.Color;
+import java.net.HttpURLConnection;
 
 @Service
 public class PdfService {
@@ -270,5 +274,75 @@ public class PdfService {
         cell.setBorder(Rectangle.NO_BORDER);
         if (alignRight) cell.setHorizontalAlignment(Element.ALIGN_RIGHT);
         table.addCell(cell);
+    }
+
+    /**
+     * Generates a multi-page PDF where each page contains one image.
+     * Used for LinkedIn Document Posts (Carousels).
+     */
+    public byte[] generateCarouselPdf(List<String> imageUrls) {
+        Document document = new Document(PageSize.A4, 0, 0, 0, 0); // No margins for full image display
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        try {
+            PdfWriter.getInstance(document, out);
+            document.open();
+
+            for (String imageUrl : imageUrls) {
+                try {
+                    // SSRF Protection: Validate URL before fetching
+                    validateImageUrl(imageUrl);
+                    
+                    // 1. Download image
+                    Image img = Image.getInstance(new URL(imageUrl));
+                    
+                    // 2. Scale image to fit page (LinkedIn looks better with squared or A4 ratio)
+                    img.scaleToFit(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+                    
+                    // 3. Center image
+                    float x = (PageSize.A4.getWidth() - img.getScaledWidth()) / 2;
+                    float y = (PageSize.A4.getHeight() - img.getScaledHeight()) / 2;
+                    img.setAbsolutePosition(x, y);
+
+                    // 4. Add to document
+                    document.add(img);
+                    
+                    // 5. Create new page for next slide (except for the last slide)
+                    document.newPage();
+                } catch (Exception e) {
+                    // Skip failed images
+                    System.err.println("Failed to add image to PDF: " + imageUrl + " - " + e.getMessage());
+                }
+            }
+
+            document.close();
+        } catch (DocumentException e) {
+            e.printStackTrace();
+        }
+
+        return out.toByteArray();
+    }
+
+    /**
+     * SSRF Protection: Validates that the image URL is safe to fetch.
+     * Blocks local, private IP ranges and keeps protocols restricted to HTTPS.
+     */
+    private void validateImageUrl(String imageUrl) throws Exception {
+        if (imageUrl == null || !imageUrl.toLowerCase().startsWith("https://")) {
+            throw new Exception("Invalid protocol. Only HTTPS is allowed for image fetching.");
+        }
+
+        java.net.URL url = new java.net.URL(imageUrl);
+        String host = url.getHost();
+        java.net.InetAddress address = java.net.InetAddress.getByName(host);
+
+        if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()) {
+            throw new Exception("SSRF Attack Blocked: Attempted to fetch from a private or local IP address (" + host + ").");
+        }
+        
+        // Additional protection: Check against a list of blocked hosts if needed
+        if (host.equalsIgnoreCase("localhost") || host.contains("169.254.169.254")) {
+            throw new Exception("SSRF Attack Blocked: Restricted host detected.");
+        }
     }
 }

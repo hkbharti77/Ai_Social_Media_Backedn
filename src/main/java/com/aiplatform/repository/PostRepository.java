@@ -12,6 +12,7 @@ import java.util.Optional;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> findByUser(User user);
+    List<Post> findByUserOrderByCreatedAtDesc(User user);
     List<Post> findByStatus(PostStatus status);
     List<Post> findByStatusAndScheduledAtBefore(PostStatus status, LocalDateTime dateTime);
     List<Post> findByUserAndStatus(User user, PostStatus status);

@@ -23,6 +23,7 @@ public class UsageController {
 
     private final CreditUsageRepository creditUsageRepository;
     private final AiUsageLogRepository aiUsageLogRepository;
+    private final com.aiplatform.service.OwnerSecurityService ownerSecurityService;
 
     @GetMapping("/history")
     public ResponseEntity<List<CreditUsage>> getUsageHistory() {
@@ -38,6 +39,10 @@ public class UsageController {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
+        if (!ownerSecurityService.isOwner(user.getEmail())) {
+            return ResponseEntity.status(403).build();
+        }
+
         List<AiUsageLog> logs = aiUsageLogRepository.findByUserOrderByCreatedAtDesc(user);
         return ResponseEntity.ok(logs);
     }
@@ -47,6 +52,10 @@ public class UsageController {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
+        if (!ownerSecurityService.isOwner(user.getEmail())) {
+            return ResponseEntity.status(403).build();
+        }
+
         // Default to last 30 days
         LocalDateTime startDate = LocalDateTime.now().minusDays(30);
         List<Map<String, Object>> summary = aiUsageLogRepository.getUsageSummaryByUser(user, startDate);

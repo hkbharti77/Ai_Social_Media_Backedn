@@ -20,12 +20,11 @@ public class LoginAttemptService {
     @Transactional
     public void loginSucceeded(String email) {
         userRepository.findByEmail(email).ifPresent(user -> {
-            int failedAttempts = user.getFailedLoginAttempts() == null ? 0 : user.getFailedLoginAttempts();
-            if (failedAttempts > 0) {
-                user.setFailedLoginAttempts(0);
-                user.setLockTime(null);
-                userRepository.save(user);
-            }
+            user.setFailedLoginAttempts(0);
+            user.setLockTime(null);
+            user.setLastLoginAt(LocalDateTime.now());
+            user.setLoginCount((user.getLoginCount() == null ? 0 : user.getLoginCount()) + 1);
+            userRepository.save(user);
         });
     }
 

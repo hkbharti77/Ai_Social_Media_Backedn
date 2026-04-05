@@ -83,7 +83,7 @@ public class SocialService {
                 "client_id=" + fbAppId +
                 "&redirect_uri=" + fbRedirectUri +
                 "&state=" + state +
-                "&scope=pages_show_list,pages_manage_posts,instagram_basic,instagram_content_publish,pages_read_engagement";
+                "&scope=pages_show_list,pages_manage_posts,instagram_basic,instagram_content_publish,pages_read_engagement,instagram_manage_insights,instagram_manage_comments";
     }
 
     public String getLinkedInAuthUrl(String state) {
