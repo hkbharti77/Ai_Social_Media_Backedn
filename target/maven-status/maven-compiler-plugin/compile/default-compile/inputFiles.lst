@@ -6,7 +6,7 @@ D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\config\Gemi
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\config\OpenApiConfig.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\config\OwnerProvisioner.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\config\RedisConfig.java
-D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\config\S3PresignerConfig.java
+D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\config\S3Config.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\config\SecurityConfig.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\controller\AdController.java
 D:\Socila_Media\Ai_Social_Media_Backedn\src\main\java\com\aiplatform\controller\AdminDashboardController.java

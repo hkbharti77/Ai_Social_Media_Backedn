@@ -1,6 +1,8 @@
 spring:
   application:
     name: ai-social-media-automation
+  profiles:
+    active: dev
   datasource:
     url: jdbc:postgresql://localhost:5432/ai_social_media
     username: ${DB_USERNAME}
@@ -9,11 +11,12 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_batch_fetch_size: 50   # Fallback batch-fetch for any remaining lazy collections
 
   data:
     redis:
@@ -41,7 +44,7 @@ spring:
         access-key: ${AWS_ACCESS_KEY_ID}
         secret-key: ${AWS_SECRET_ACCESS_KEY}
       region:
-        static: ${AWS_REGION:eu-north-1}
+        static: ${AWS_REGION:ap-south-1}
       s3:
         bucket: ${AWS_S3_BUCKET_NAME}
   ai:
@@ -76,6 +79,7 @@ app:
     owner-email: ${OWNER_EMAIL:hkbharti77@gmail.com}
   use-s3: ${USE_S3:true}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  backend-url: ${BACKEND_URL:http://localhost:8080}
   scheduling:
     # Trigger times (Cron format: "sec min hour day month weekday") — zone: Asia/Kolkata (IST)
     morning-draft-cron: "0 0 6 * * ?"       # 6:00 AM IST — Generate morning drafts

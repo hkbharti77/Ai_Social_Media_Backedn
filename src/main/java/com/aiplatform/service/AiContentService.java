@@ -32,9 +32,15 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.LocalDateTime;
+
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -451,6 +457,7 @@ public class AiContentService {
 
         List<GeneratedPost> results = new ArrayList<>();
         for (int i = 0; i < request.getCount(); i++) {
+            if (i > 0) throttle(2000); // 2s delay between batch items to prevent 429 RPM hits
             results.add(generatePost(bp, request.getCommand(), userId, request.getModelId(), request, true));
         }
         return results;
@@ -467,6 +474,7 @@ public class AiContentService {
 
         List<GeneratedPost> results = new ArrayList<>();
         for (int i = 0; i < request.getCount(); i++) {
+            if (i > 0) throttle(2000); // 2s delay between batch items
             results.add(generateStory(bp, request.getCommand(), userId, request.getModelId(), request, true));
         }
         return results;
@@ -500,7 +508,10 @@ public class AiContentService {
             }
         }
 
+        String voiceMode = (request != null) ? request.getVoiceMode() : null;
+        String brandVoiceContext = buildBrandVoiceContext(bp, voiceMode);
         String visualContext = buildVisualContext(bp);
+
         PromptTemplate pt = new PromptTemplate(STORY_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
                 "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
@@ -508,6 +519,7 @@ public class AiContentService {
                 "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general audience",
                 "command", guardInput(userCmd),
                 "visualContext", visualContext,
+                "brandVoiceContext", brandVoiceContext,
                 "jsonStructure", "{\"caption\": \"Catchy story caption...\", \"hashtags\": [\"#StoryTag\"], \"imageSuggestion\": \"Describe a vertical scene...\"}"
         ));
 
@@ -735,12 +747,15 @@ public class AiContentService {
                 ? "SPECIFIC INSTRUCTION / TOPIC: " + command.trim() 
                 : "Make it relevant to general industry trends.";
 
+        String brandVoiceContext = buildBrandVoiceContext(bp, null);
+
         PromptTemplate pt = new PromptTemplate(MEME_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
                 "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
                 "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
                 "commandText", commandText,
                 "tone", bp.getBrandTone() != null ? bp.getBrandTone() : "witty",
+                "brandVoiceContext", brandVoiceContext,
                 "jsonStructure", "{\"caption\": \"...\", \"memeTextTop\": \"...\", \"memeTextBottom\": \"...\", \"imageDescription\": \"...\"}"
         ));
 
@@ -915,6 +930,10 @@ public class AiContentService {
     }
 
     private String generateAndUploadImage(String suggestion, String userCommand, Long userId, String modelId, BusinessProfile bp) throws Exception {
+        return generateAndUploadImageInternal(suggestion, userCommand, userId, modelId, bp, 0);
+    }
+
+    private String generateAndUploadImageInternal(String suggestion, String userCommand, Long userId, String modelId, BusinessProfile bp, int attempt) throws Exception {
         subscriptionService.checkImageStorageLimit(userId);
         
         AiModelSelection meta = AiModelSelection.fromModelId(modelId);
@@ -994,6 +1013,15 @@ public class AiContentService {
                 "candidateCount", 1
             ));
             requestBody.put("generationConfig", generationConfig);
+
+            // --- 5. Add Safety Settings to prevent false-positive blocks ---
+            List<Map<String, String>> safetySettings = List.of(
+                Map.of("category", "HARM_CATEGORY_HATE_SPEECH", "threshold", "BLOCK_NONE"),
+                Map.of("category", "HARM_CATEGORY_HARASSMENT", "threshold", "BLOCK_NONE"),
+                Map.of("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold", "BLOCK_NONE"),
+                Map.of("category", "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold", "BLOCK_NONE")
+            );
+            requestBody.put("safetySettings", safetySettings);
         } else {
             // Imagen Protocol supports separate parameters but NO LONGER handles negativePrompt explicitly
             requestBody.put("instances", Collections.singletonList(Map.of("prompt", enhancedPrompt)));
@@ -1034,22 +1062,56 @@ public class AiContentService {
                 }
 
                 if (imageBytes != null) {
-                    String fileName = "ai_image_" + UUID.randomUUID() + ".png";
+                    try {
+                        // CONVERSION: PNG -> JPEG (Instagram handles JPEGs much better than PNGs for signed URLs)
+                        BufferedImage pngImage = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                        if (pngImage != null) {
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            // Handle transparency by filling with white background
+                            BufferedImage resultImage = new BufferedImage(
+                                pngImage.getWidth(), 
+                                pngImage.getHeight(), 
+                                BufferedImage.TYPE_INT_RGB
+                            );
+                            Graphics2D g = resultImage.createGraphics();
+                            g.setPaint(Color.WHITE);
+                            g.fillRect(0, 0, resultImage.getWidth(), resultImage.getHeight());
+                            g.drawImage(pngImage, 0, 0, null);
+                            g.dispose();
+                            
+                            ImageIO.write(resultImage, "jpg", baos);
+                            imageBytes = baos.toByteArray();
+                        }
+                    } catch (Exception e) {
+                        logger.warn("⚠️ Failed to convert AI image to JPEG, falling back to PNG: {}", e.getMessage());
+                    }
+
+                    String fileName = "ai_image_" + UUID.randomUUID() + ".jpg";
                     try (InputStream is = new ByteArrayInputStream(imageBytes)) {
-                        String resultUrl = s3Service.uploadFile(fileName, is, userId);
-                        logger.info("✅ Image Gen successful: {}", resultUrl);
+                        // public-read so Instagram/Facebook can fetch the URL without auth
+                        String resultUrl = s3Service.uploadFile(fileName, is, userId, true);
+                        logger.info("✅ Image Gen successful (JPEG): {}", resultUrl);
                         subscriptionService.incrementImageStorage(userId);
                         return resultUrl;
                     }
                 } else {
-                    logger.warn("⚠️ Image Gen response was 200 OK but imageBytes is NULL. Body: {}", root.toString());
+                    String reason = root.path("candidates").get(0).path("finishReason").asText();
+                    logger.warn("⚠️ Image Gen response was 200 OK but imageBytes is NULL. Finish Reason: {}. Body: {}", reason, root.toString());
+                    if ("SAFETY".equals(reason) || "NO_IMAGE".equals(reason)) {
+                         throw new RuntimeException("AI blocked image generation due to safety filters or complex prompt. Try a simpler or more artistic description.");
+                    }
                 }
             }
             throw new RuntimeException("Image generation failed status: " + response.getStatusCode());
         } catch (HttpStatusCodeException e) {
             String errorBody = e.getResponseBodyAsString();
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS || errorBody.contains("429")) {
-                logger.error("❌ AI Quota Exceeded (429) during image generation.");
+                if (attempt < 1) {
+                    logger.warn("⚠️ AI Quota hit. Entering Emergency Wait (5s) for retry [Attempt {}]", attempt + 1);
+                    throttle(5000);
+                    return generateAndUploadImageInternal(suggestion, userCommand, userId, modelId, bp, attempt + 1);
+                }
+                logger.error("❌ AI Quota Exceeded (429) during image generation after retry.");
                 throw new RuntimeException("AI API Quota Exceeded. Please wait 60 seconds and try again.");
             }
             logger.error("❌ Image Generation API Error: {} - Body: {}", e.getStatusCode(), errorBody);
@@ -1057,6 +1119,10 @@ public class AiContentService {
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : "";
             if (msg.contains("429")) {
+                if (attempt < 1) {
+                    throttle(5000);
+                    return generateAndUploadImageInternal(suggestion, userCommand, userId, modelId, bp, attempt + 1);
+                }
                 throw new RuntimeException("AI API Quota Exceeded. Please try again in 60 seconds.");
             }
             logger.error("❌ Image Generation Exception: {}", e.getMessage(), e);
@@ -1262,6 +1328,7 @@ public class AiContentService {
             if (generatedPosts != null) {
                 for (GeneratedPost post : generatedPosts) {
                     if (post.getImageSuggestion() != null && !post.getImageSuggestion().isEmpty()) {
+                        throttle(2000); // 2s delay between repurposed images
                         try {
                             String imageUrl = generateAndUploadImage(post.getImageSuggestion(), "Repurpose " + request.getUrl(), userId, finalModelId, bp);
                             post.setImageUrl(imageUrl);
@@ -1752,12 +1819,14 @@ public class AiContentService {
     }
 
     private String buildBrandVoiceContext(BusinessProfile bp, String modeStr) {
-        BrandVoiceMode mode = STYLE_DNA;
+        BrandVoiceMode mode = NONE;
         try {
             if (modeStr != null) mode = valueOf(modeStr.toUpperCase());
         } catch (Exception e) {
-            mode = bp.getDefaultVoiceMode() != null ? bp.getDefaultVoiceMode() : STYLE_DNA;
+            mode = bp.getDefaultVoiceMode() != null ? bp.getDefaultVoiceMode() : NONE;
         }
+
+        if (mode == NONE) return "";
 
         StringBuilder sb = new StringBuilder();
         sb.append("\n### 🎭 BRAND VOICE & PERSONAL STYLE\n");
@@ -1780,11 +1849,11 @@ public class AiContentService {
     }
 
     private void deductPersonalizationCredits(Long userId, String modeStr) {
-        BrandVoiceMode mode = STYLE_DNA;
+        BrandVoiceMode mode = NONE;
         try {
             if (modeStr != null) mode = valueOf(modeStr.toUpperCase());
         } catch (Exception e) {
-            // Fallback to STYLE_DNA
+            // Fallback to NONE
         }
 
         if (mode == STYLE_DNA) {

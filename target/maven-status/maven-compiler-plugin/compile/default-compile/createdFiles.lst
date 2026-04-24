@@ -23,7 +23,6 @@ com\aiplatform\dto\PollDtos.class
 com\aiplatform\controller\CommunityController.class
 com\aiplatform\dto\FacebookReviewDtos$ReviewData.class
 com\aiplatform\dto\ContentGenerationDtos$PerformancePredictionRequest.class
-com\aiplatform\config\S3PresignerConfig.class
 com\aiplatform\dto\ContentGenerationDtos$CampaignResponse$CampaignResponseBuilder.class
 com\aiplatform\repository\PostRepository.class
 com\aiplatform\security\EncryptionUtils.class
@@ -145,11 +144,13 @@ com\aiplatform\dto\AdminAnalyticsDtos$AdminDashboardStats$AdminDashboardStatsBui
 com\aiplatform\dto\FacebookReviewDtos.class
 com\aiplatform\service\InstagramInsightsService.class
 com\aiplatform\service\AiContentService.class
+com\aiplatform\service\FraudDetectionService.class
 com\aiplatform\dto\AuthDtos$TokenRefreshRequest.class
 com\aiplatform\dto\AuthDtos$SignupRequest.class
 com\aiplatform\model\User$UserBuilder.class
 com\aiplatform\repository\PricingRepository.class
 com\aiplatform\exception\StorageLimitExceededException.class
+com\aiplatform\controller\AdController.class
 com\aiplatform\repository\PaymentOrderRepository.class
 com\aiplatform\dto\AdminAnalyticsDtos$UserIntelligenceDto.class
 com\aiplatform\scheduler\SecurityScheduler.class

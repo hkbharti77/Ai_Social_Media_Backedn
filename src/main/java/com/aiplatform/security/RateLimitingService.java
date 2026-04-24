@@ -20,7 +20,10 @@ public class RateLimitingService {
 
     public Bucket resolveBucket(String key) {
         Supplier<BucketConfiguration> configSupplier = () -> BucketConfiguration.builder()
-                .addLimit(Bandwidth.classic(100, Refill.greedy(100, Duration.ofMinutes(15))))
+                // 500 requests per 15 minutes per user/IP
+                // A typical dashboard load fires ~8 requests simultaneously,
+                // so 100 was too low for normal usage patterns.
+                .addLimit(Bandwidth.classic(500, Refill.greedy(500, Duration.ofMinutes(15))))
                 .build();
         return proxyManager.builder().build(key.getBytes(StandardCharsets.UTF_8), configSupplier);
     }

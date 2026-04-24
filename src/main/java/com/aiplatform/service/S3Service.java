@@ -11,6 +11,9 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
@@ -21,6 +24,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class S3Service {
+    private static final Logger logger = LoggerFactory.getLogger(S3Service.class);
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
@@ -78,22 +82,35 @@ public class S3Service {
 
     /**
      * Uploads an InputStream to S3 with a specific filename in social_media/{userId} folder.
-     * Returns a pre-signed URL for immediate access.
+     * Returns a permanent public URL for immediate access.
      */
     public String uploadFile(String fileName, InputStream inputStream, Long userId) {
+        return uploadFile(fileName, inputStream, userId, false);
+    }
+
+    /**
+     * Uploads an InputStream to S3 with a specific filename in social_media/{userId} folder.
+     * @param publicRead if true, sets the object ACL to public-read so the plain URL is accessible
+     *                   without credentials (required for Instagram/Facebook media ingestion).
+     */
+    public String uploadFile(String fileName, InputStream inputStream, Long userId, boolean publicRead) {
         String key = S3_FOLDER + userId + "/" + fileName;
 
         try {
             byte[] bytes = inputStream.readAllBytes();
 
-            PutObjectRequest putRequest = PutObjectRequest.builder()
+            String contentType = determineContentType(fileName);
+            PutObjectRequest.Builder builder = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
-                    .contentType("image/png")
-                    .checksumAlgorithm(ChecksumAlgorithm.SHA256)
-                    .build();
+                    .contentType(contentType)
+                    .checksumAlgorithm(ChecksumAlgorithm.SHA256);
 
-            s3Client.putObject(putRequest, RequestBody.fromBytes(bytes));
+            if (publicRead) {
+                builder.acl(ObjectCannedACL.PUBLIC_READ);
+            }
+
+            s3Client.putObject(builder.build(), RequestBody.fromBytes(bytes));
         } catch (IOException e) {
             throw new RuntimeException("Failed to read input stream for S3 upload", e);
         }
@@ -119,6 +136,16 @@ public class S3Service {
         return presignedUrl.split("\\?")[0];
     }
 
+    private String determineContentType(String fileName) {
+        if (fileName == null) return "application/octet-stream";
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".mp4")) return "video/mp4";
+        if (lower.endsWith(".pdf")) return "application/pdf";
+        return "application/octet-stream";
+    }
+
     /**
      * Extracts the S3 Key from a URL (permanent or pre-signed).
      */
@@ -126,9 +153,45 @@ public class S3Service {
         if (url == null || !url.contains(".amazonaws.com/")) {
             return url;
         }
-        // Extract key from the URL path: HKHBARTI77.s3.eu-north-1.amazonaws.com/[key]
-        String path = url.split("\\.amazonaws\\.com/")[1].split("\\?")[0];
-        return path;
+        try {
+            // URL format: https://bucket.s3.region.amazonaws.com/path/to/object?query
+            // or https://bucket.s3.amazonaws.com/path/to/object
+            String pathPart = url.split("\\.amazonaws\\.com/")[1];
+            // Remove query parameters if present
+            if (pathPart.contains("?")) {
+                pathPart = pathPart.substring(0, pathPart.indexOf("?"));
+            }
+            return pathPart;
+        } catch (Exception e) {
+            logger.warn("Failed to extract key from URL: {}. Returning original.", url);
+            return url;
+        }
+    }
+
+    /**
+     * Generates a pre-signed URL for public read access (e.g. for Instagram/Facebook media ingestion).
+     * The URL is valid for the given duration and does NOT force a download.
+     */
+    public String generatePresignedReadUrl(String key, Duration duration) {
+        GetObjectRequest getRequest = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(duration)
+                .getObjectRequest(getRequest)
+                .build();
+
+        PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(presignRequest);
+        return presigned.url().toString();
+    }
+
+    /**
+     * Convenience overload — generates a pre-signed read URL valid for 1 hour.
+     */
+    public String generatePresignedReadUrl(String key) {
+        return generatePresignedReadUrl(key, Duration.ofHours(1));
     }
 
     /**

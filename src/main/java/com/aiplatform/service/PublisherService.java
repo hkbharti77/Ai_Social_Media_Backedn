@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -49,7 +50,11 @@ public class PublisherService {
     @Autowired
     private PdfService pdfService;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private S3Service s3Service;
+
+    @Autowired
+    private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Async
@@ -145,7 +150,7 @@ public class PublisherService {
                 for (CarouselSlide slide : carousel.getSlides()) {
                     String photoUrl = "https://graph.facebook.com/v19.0/" + pageId + "/photos";
                     MultiValueMap<String, String> photoBody = new LinkedMultiValueMap<>();
-                    photoBody.add("url", slide.getImageUrl());
+                    photoBody.add("url", getAccessibleUrl(slide.getImageUrl()));
                     photoBody.add("published", "false");
                     photoBody.add("access_token", accessToken);
                     
@@ -184,7 +189,7 @@ public class PublisherService {
             String url = "https://graph.facebook.com/v19.0/" + pageId + "/photos";
             
             MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-            body.add("url", post.getImageUrl());
+            body.add("url", getAccessibleUrl(post.getImageUrl()));
             body.add("caption", fullCaption);
             body.add("access_token", accessToken);
 
@@ -273,14 +278,19 @@ public class PublisherService {
 
                 // Step 1: Create Image Containers for each slide
                 for (CarouselSlide slide : carousel.getSlides()) {
-                    String containerUrl = "https://graph.facebook.com/v19.0/" + igId + "/media";
-                    MultiValueMap<String, Object> slideBody = new LinkedMultiValueMap<>();
-                    slideBody.add("image_url", slide.getImageUrl());
-                    slideBody.add("is_carousel_item", "true");
-                    slideBody.add("access_token", accessToken);
+                    String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
+                    Map<String, Object> slideBody = new HashMap<>();
+                    slideBody.put("image_url", getAccessibleUrl(slide.getImageUrl()));
+                    slideBody.put("media_type", "IMAGE");
+                    slideBody.put("is_carousel_item", "true");
+                    slideBody.put("access_token", accessToken);
+
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.APPLICATION_JSON);
+                    HttpEntity<Map<String, Object>> request = new HttpEntity<>(slideBody, headers);
 
                     @SuppressWarnings("unchecked")
-                    Map<String, Object> slideResp = restTemplate.postForObject(containerUrl, slideBody, Map.class);
+                    Map<String, Object> slideResp = restTemplate.postForObject(containerUrl, request, Map.class);
                     if (slideResp == null || !slideResp.containsKey("id")) {
                         throw new RuntimeException("Failed to create Instagram slide container.");
                     }
@@ -288,15 +298,19 @@ public class PublisherService {
                 }
 
                 // Step 2: Create Carousel Container
-                String rootContainerUrl = "https://graph.facebook.com/v19.0/" + igId + "/media";
-                MultiValueMap<String, Object> rootBody = new LinkedMultiValueMap<>();
-                rootBody.add("media_type", "CAROUSEL");
-                rootBody.add("caption", post.getCaption() + "\n\n" + post.getHashtags());
-                rootBody.add("children", String.join(",", childIds));
-                rootBody.add("access_token", accessToken);
+                String rootContainerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
+                Map<String, Object> rootBody = new HashMap<>();
+                rootBody.put("media_type", "CAROUSEL");
+                rootBody.put("caption", post.getCaption() + "\n\n" + post.getHashtags());
+                rootBody.put("children", String.join(",", childIds));
+                rootBody.put("access_token", accessToken);
+
+                HttpHeaders rootHeaders = new HttpHeaders();
+                rootHeaders.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<Map<String, Object>> rootRequest = new HttpEntity<>(rootBody, rootHeaders);
 
                 @SuppressWarnings("unchecked")
-                Map<String, Object> rootResp = restTemplate.postForObject(rootContainerUrl, rootBody, Map.class);
+                Map<String, Object> rootResp = restTemplate.postForObject(rootContainerUrl, rootRequest, Map.class);
                 if (rootResp == null || !rootResp.containsKey("id")) {
                     throw new RuntimeException("Failed to create Instagram Carousel root container.");
                 }
@@ -305,15 +319,19 @@ public class PublisherService {
                 // Step 3: Wait and Publish
                 waitForMediaStatus(carouselId, accessToken);
                 
-                String publishUrl = "https://graph.facebook.com/v19.0/" + igId + "/media_publish";
-                MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
-                publishBody.add("creation_id", carouselId);
-                publishBody.add("access_token", accessToken);
+                String publishUrl = "https://graph.facebook.com/v21.0/" + igId + "/media_publish";
+                Map<String, Object> publishBody = new HashMap<>();
+                publishBody.put("creation_id", carouselId);
+                publishBody.put("access_token", accessToken);
+
+                HttpHeaders publishHeaders = new HttpHeaders();
+                publishHeaders.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, publishHeaders);
 
                 @SuppressWarnings("unchecked")
-                Map<String, Object> finalResp = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+                Map<String, Object> finalResp = restTemplate.postForObject(publishUrl, publishRequest, Map.class);
                 post.setExternalPostId((String) finalResp.get("id"));
-                logger.info("\ud83c\udfa0 Instagram Carousel Successful: {}", post.getExternalPostId());
+                logger.info("🚡 Instagram Carousel Successful: {}", post.getExternalPostId());
 
             } catch (Exception e) {
                 logger.error("Instagram Carousel Error: {}", e.getMessage());
@@ -321,15 +339,15 @@ public class PublisherService {
             }
         } else {
             // STEP 1: Create media container
-            String containerUrl = "https://graph.facebook.com/v19.0/" + igId + "/media";
-            
-            MultiValueMap<String, Object> containerBody = new LinkedMultiValueMap<>();
-            containerBody.add("image_url", post.getImageUrl());
-            containerBody.add("caption", post.getCaption() + "\n\n" + post.getHashtags());
-            containerBody.add("access_token", accessToken);
+            String containerUrl = UriComponentsBuilder.fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media")
+                    .queryParam("image_url", getAccessibleUrl(post.getImageUrl()))
+                    .queryParam("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""))
+                    .queryParam("access_token", accessToken)
+                    .toUriString();
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, containerBody, Map.class);
+            Map<String, Object> containerResponse = executeMetaCallWithRetry(() -> 
+                restTemplate.postForObject(containerUrl, null, Map.class));
+                
             String creationId = (String) containerResponse.get("id");
             
             if (creationId == null) {
@@ -340,13 +358,13 @@ public class PublisherService {
             waitForMediaStatus(creationId, accessToken);
 
             // STEP 3: Publish media
-            String publishUrl = "https://graph.facebook.com/v19.0/" + igId + "/media_publish";
-            MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
-            publishBody.add("creation_id", creationId);
-            publishBody.add("access_token", accessToken);
+            String publishUrl = UriComponentsBuilder.fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media_publish")
+                    .queryParam("creation_id", creationId)
+                    .queryParam("access_token", accessToken)
+                    .toUriString();
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+            Map<String, Object> publishResponse = executeMetaCallWithRetry(() -> 
+                restTemplate.postForObject(publishUrl, null, Map.class));
             post.setExternalPostId((String) publishResponse.get("id"));
         }
     }
@@ -361,7 +379,7 @@ public class PublisherService {
                 Thread.sleep(5000);
                 retries++;
                 
-                String statusUrl = "https://graph.facebook.com/v19.0/" + creationId + 
+                String statusUrl = "https://graph.facebook.com/v21.0/" + creationId + 
                                   "?fields=status_code&access_token=" + accessToken;
                 @SuppressWarnings("unchecked")
                 Map<String, Object> statusResponse = restTemplate.getForObject(statusUrl, Map.class);
@@ -529,13 +547,17 @@ public class PublisherService {
         try {
             // Step 1: Create Stories Media Container
             String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
-            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("image_url", post.getImageUrl());
-            body.add("media_type", "STORIES");
-            body.add("access_token", accessToken);
+            Map<String, Object> body = new HashMap<>();
+            body.put("image_url", getAccessibleUrl(post.getImageUrl()));
+            body.put("media_type", "STORIES");
+            body.put("access_token", accessToken);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, body, Map.class);
+            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, request, Map.class);
             String creationId = (String) containerResponse.get("id");
 
             if (creationId == null) throw new RuntimeException("Failed to create IG Story container.");
@@ -544,12 +566,14 @@ public class PublisherService {
 
             // Step 2: Publish
             String publishUrl = "https://graph.facebook.com/v21.0/" + igId + "/media_publish";
-            MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
-            publishBody.add("creation_id", creationId);
-            publishBody.add("access_token", accessToken);
+            Map<String, Object> publishBody = new HashMap<>();
+            publishBody.put("creation_id", creationId);
+            publishBody.put("access_token", accessToken);
+
+            HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, headers);
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishRequest, Map.class);
             post.setExternalPostId((String) publishResponse.get("id"));
             logger.info("📸 Instagram Story Published successfully: {}", post.getExternalPostId());
         } catch (Exception e) {
@@ -568,7 +592,7 @@ public class PublisherService {
 
             String uploadUrl = "https://graph.facebook.com/v21.0/" + pageId + "/photos";
             MultiValueMap<String, Object> uploadBody = new LinkedMultiValueMap<>();
-            uploadBody.add("url", post.getImageUrl());
+            uploadBody.add("url", getAccessibleUrl(post.getImageUrl()));
             uploadBody.add("published", "false");
             uploadBody.add("access_token", accessToken);
 
@@ -603,14 +627,18 @@ public class PublisherService {
 
             // Step 1: Create Media Container for REELS
             String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
-            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("video_url", post.getVideoUrl());
-            body.add("media_type", "REELS");
-            body.add("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
-            body.add("access_token", accessToken);
+            Map<String, Object> body = new HashMap<>();
+            body.put("video_url", post.getVideoUrl());
+            body.put("media_type", "REELS");
+            body.put("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
+            body.put("access_token", accessToken);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, body, Map.class);
+            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, request, Map.class);
             String creationId = (String) containerResponse.get("id");
 
             if (creationId == null) throw new RuntimeException("Failed to create IG Reels container.");
@@ -620,12 +648,14 @@ public class PublisherService {
 
             // Step 3: Publish
             String publishUrl = "https://graph.facebook.com/v21.0/" + igId + "/media_publish";
-            MultiValueMap<String, Object> publishBody = new LinkedMultiValueMap<>();
-            publishBody.add("creation_id", creationId);
-            publishBody.add("access_token", accessToken);
+            Map<String, Object> publishBody = new HashMap<>();
+            publishBody.put("creation_id", creationId);
+            publishBody.put("access_token", accessToken);
+
+            HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, headers);
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishBody, Map.class);
+            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishRequest, Map.class);
             post.setExternalPostId((String) publishResponse.get("id"));
             logger.info("🎥 Instagram Reel Published successfully: {}", post.getExternalPostId());
         } catch (Exception e) {
@@ -739,6 +769,45 @@ public class PublisherService {
         } catch (Exception e) {
             logger.error("X Poll Error: {}", e.getMessage());
             throw new RuntimeException("X Poll publishing failed", e);
+        }
+    }
+
+    /**
+     * Resolves an S3 permanent URL to a temporary Presigned URL.
+     * This ensures Meta's crawlers can fetch the image even if the bucket is restricted.
+     */
+    private String getAccessibleUrl(String imageUrl) {
+        // We revert to returning the original URL because Meta (Instagram/Facebook) 
+        // often performs a HEAD request before a GET. Presigned URLs for GET will fail HEAD requests.
+        // User's S3 bucket is configured for public read of these media assets.
+        return imageUrl;
+    }
+
+    private <T> T executeMetaCallWithRetry(java.util.function.Supplier<T> call) {
+        int maxRetries = 2;
+        int attempt = 0;
+        while (attempt <= maxRetries) {
+            try {
+                return call.get();
+            } catch (Exception e) {
+                String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+                if (attempt < maxRetries && (msg.contains("connection reset") || msg.contains("i/o error") || msg.contains("timeout"))) {
+                    attempt++;
+                    logger.warn("⚠️ Meta API Network Error ({}). Retrying in 2s... [Attempt {}]", msg, attempt);
+                    throttle(2000);
+                    continue;
+                }
+                throw e;
+            }
+        }
+        return null;
+    }
+
+    private void throttle(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 }

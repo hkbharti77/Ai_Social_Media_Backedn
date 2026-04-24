@@ -27,6 +27,7 @@ public class PaymentService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final SubscriptionService subscriptionService;
     private final EmailService emailService;
+    private final EmailTemplateUtils emailTemplateUtils;
 
     @Value("${razorpay.key.id}")
     private String razorpayKeyId;
@@ -148,7 +149,7 @@ public class PaymentService {
     private void sendPaymentReceipt(PaymentOrder order) {
         try {
             String subject = "\u2728 Your VaniAI Upgrade is Complete!";
-            String htmlBody = EmailTemplateUtils.getPaymentReceiptHtml(order);
+            String htmlBody = emailTemplateUtils.getPaymentReceiptHtml(order);
             emailService.sendHtmlMessage(order.getUser().getEmail(), subject, htmlBody);
         } catch (Exception e) {
             log.error("\u274C [PaymentService] Failed to send receipt for order {}: {}", order.getRazorpayOrderId(), e.getMessage());

@@ -75,7 +75,8 @@ public class SocialService {
     @Autowired
     private RedisClient redisClient;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public String getFacebookAuthUrl(String state) {

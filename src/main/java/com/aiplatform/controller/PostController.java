@@ -43,7 +43,8 @@ public class PostController {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
-        List<Post> posts = postRepository.findByUser(user);
+        // Use JOIN FETCH query to load all posts + comments in a single SQL query (avoids N+1)
+        List<Post> posts = postRepository.findByUserWithComments(user);
         logger.info("📡 [PostController] Fetched {} posts for user {}", posts.size(), user.getEmail());
         return ResponseEntity.ok(posts);
     }
@@ -60,6 +61,7 @@ public class PostController {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
+        // findByUser is fine here — comments are @JsonIgnore so no N+1 risk
         List<Post> posts = postRepository.findByUser(user);
         
         DashboardStats stats = DashboardStats.builder()

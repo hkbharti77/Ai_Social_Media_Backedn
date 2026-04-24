@@ -18,6 +18,9 @@ public class EmailService {
     @Autowired
     private JavaMailSender mailSender;
 
+    @Autowired
+    private EmailTemplateUtils emailTemplateUtils;
+
     @Value("${mail.sender}")
     private String fromEmail;
 
@@ -48,22 +51,22 @@ public class EmailService {
     }
 
     public void sendWelcomeEmail(User user) {
-        String htmlBody = EmailTemplateUtils.getWelcomeEmailHtml(user);
+        String htmlBody = emailTemplateUtils.getWelcomeEmailHtml(user);
         sendHtmlMessage(user.getEmail(), "\u2728 Welcome to GyanVaniAi - Setup Complete!", htmlBody);
     }
 
     public void sendLowCreditAlert(User user) {
-        String htmlBody = EmailTemplateUtils.getLowCreditAlertHtml(user);
+        String htmlBody = emailTemplateUtils.getLowCreditAlertHtml(user);
         sendHtmlMessage(user.getEmail(), "\u26a0\ufe0f Critical Capacity Alert: GyanVaniAi Credits Running Low", htmlBody);
     }
 
     public void sendPlanExpiredEmail(User user) {
-        String htmlBody = EmailTemplateUtils.getPlanExpiredHtml(user);
+        String htmlBody = emailTemplateUtils.getPlanExpiredHtml(user);
         sendHtmlMessage(user.getEmail(), "\u231b System Notice: Your GyanVaniAi Subscription has Expired", htmlBody);
     }
 
     public void sendVerificationEmail(User user, String token) {
-        String htmlBody = EmailTemplateUtils.getVerificationEmailHtml(user, token);
+        String htmlBody = emailTemplateUtils.getVerificationEmailHtml(user, token);
         sendHtmlMessage(user.getEmail(), "Verify your GyanVaniAi Account", htmlBody);
     }
 }

@@ -19,42 +19,52 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     @Autowired
     private RateLimitingService rateLimitingService;
 
-    @Autowired
-    private org.springframework.core.env.Environment env;
-
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        
+
+        // Skip preflight CORS requests
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String ip = request.getRemoteAddr();
-        
-        // Simulation Bypass: Allow localhost only in "dev" profile
-        boolean isLocalhost = "127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip);
-        boolean isDev = env.acceptsProfiles(org.springframework.core.env.Profiles.of("dev"));
 
-        if (isLocalhost && isDev) {
+        // Always bypass rate limiting for localhost (development)
+        boolean isLocalhost = "127.0.0.1".equals(ip)
+                || "0:0:0:0:0:0:0:1".equals(ip)
+                || "::1".equals(ip)
+                || "localhost".equals(ip);
+
+        if (isLocalhost) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        Bucket bucket = rateLimitingService.resolveBucket(ip);
+        // Use authenticated user identity as bucket key when available,
+        // otherwise fall back to IP — prevents shared-IP false positives (e.g. office NAT)
+        String principal = request.getUserPrincipal() != null
+                ? "user:" + request.getUserPrincipal().getName()
+                : "ip:" + ip;
+
+        Bucket bucket = rateLimitingService.resolveBucket(principal);
 
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         if (probe.isConsumed()) {
             response.addHeader("X-Rate-Limit-Remaining", String.valueOf(probe.getRemainingTokens()));
             filterChain.doFilter(request, response);
         } else {
+            long retryAfterSeconds = probe.getNanosToWaitForRefill() / 1_000_000_000;
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-            response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(probe.getNanosToWaitForRefill() / 1_000_000_000));
+            response.setContentType("application/json");
+            response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(retryAfterSeconds));
             try {
-                response.getWriter().write("Too many requests");
+                response.getWriter().write(
+                    "{\"error\":\"Too many requests\",\"retryAfterSeconds\":" + retryAfterSeconds + "}"
+                );
             } catch (IOException e) {
-                // Ignore
+                // Ignore write errors
             }
         }
     }

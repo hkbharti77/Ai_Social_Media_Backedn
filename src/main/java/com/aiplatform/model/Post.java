@@ -126,6 +126,7 @@ public class Post {
     @Column(name = "last_recycled_at")
     private LocalDateTime lastRecycledAt;
 
-    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Comment> comments;
 }

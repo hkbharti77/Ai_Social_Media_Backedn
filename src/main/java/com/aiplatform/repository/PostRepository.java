@@ -21,6 +21,21 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> findByUserAndStatusAndCreatedAtAfter(User user, PostStatus status, LocalDateTime after);
     List<Post> findByUserAndStatusAndSlotTypeAndCreatedAtAfter(User user, PostStatus status, String slotType, LocalDateTime after);
 
+    // ─── Batch-fetch posts WITH comments in a single JOIN query (fixes N+1) ───
+
+    /**
+     * Fetches all posts for a user with their comments in ONE query using JOIN FETCH.
+     * Use this instead of findByUser() when comments are needed in the response.
+     */
+    @Query("SELECT DISTINCT p FROM Post p LEFT JOIN FETCH p.comments WHERE p.user = :user ORDER BY p.createdAt DESC")
+    List<Post> findByUserWithComments(@Param("user") User user);
+
+    /**
+     * Fetches posts by status with comments in ONE query.
+     */
+    @Query("SELECT DISTINCT p FROM Post p LEFT JOIN FETCH p.comments WHERE p.user = :user AND p.status = :status")
+    List<Post> findByUserAndStatusWithComments(@Param("user") User user, @Param("status") PostStatus status);
+
     // ─── Evergreen Queue Queries ───────────────────────────────────────────
 
     /** All evergreen posts for a user, ordered by score desc */

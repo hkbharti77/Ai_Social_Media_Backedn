@@ -28,7 +28,7 @@ public class FacebookReviewService {
     private final BusinessProfileRepository businessProfileRepository;
     private final EncryptionUtils encryptionUtils;
     private final AiContentService aiContentService;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public List<ReviewData> getPageReviews(User user) {

@@ -22,7 +22,7 @@ public class InstagramInsightsService {
     
     private final SocialAccountRepository socialAccountRepository;
     private final EncryptionUtils encryptionUtils;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public JsonNode getBestTimeReport(User user) {
