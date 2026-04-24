@@ -129,6 +129,7 @@ com\aiplatform\dto\AdminAnalyticsDtos$AdminDashboardStats.class
 com\aiplatform\controller\PaymentController.class
 com\aiplatform\dto\ContentGenerationDtos$ViralOpportunityRequest.class
 com\aiplatform\model\PricingTier$PricingTierBuilder.class
+com\aiplatform\config\S3Config.class
 com\aiplatform\dto\FacebookReviewDtos$ReviewData$ReviewDataBuilder.class
 com\aiplatform\dto\ContentGenerationDtos$PollResponse.class
 com\aiplatform\service\EmailService.class

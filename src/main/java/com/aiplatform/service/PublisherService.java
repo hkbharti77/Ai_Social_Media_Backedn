@@ -210,6 +210,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void publishToX(Post post, String accessToken) {
         String url = "https://api.twitter.com/2/tweets";
         
@@ -256,10 +257,8 @@ public class PublisherService {
                 body.put("text", text);
 
                 HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-                @SuppressWarnings("unchecked")
                 Map<String, Object> response = restTemplate.postForObject(url, request, Map.class);
                 
-                @SuppressWarnings("unchecked")
                 Map<String, Object> data = (Map<String, Object>) response.get("data");
                 post.setExternalPostId((String) data.get("id"));
                 logger.info("🐦 Successfully published single Tweet (id={})", post.getExternalPostId());
@@ -270,6 +269,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void publishToInstagram(Post post, String igId, String accessToken) {
         if (Boolean.TRUE.equals(post.getIsCarousel()) && post.getCarouselContent() != null) {
             try {
@@ -289,7 +289,6 @@ public class PublisherService {
                     headers.setContentType(MediaType.APPLICATION_JSON);
                     HttpEntity<Map<String, Object>> request = new HttpEntity<>(slideBody, headers);
 
-                    @SuppressWarnings("unchecked")
                     Map<String, Object> slideResp = restTemplate.postForObject(containerUrl, request, Map.class);
                     if (slideResp == null || !slideResp.containsKey("id")) {
                         throw new RuntimeException("Failed to create Instagram slide container.");
@@ -309,7 +308,6 @@ public class PublisherService {
                 rootHeaders.setContentType(MediaType.APPLICATION_JSON);
                 HttpEntity<Map<String, Object>> rootRequest = new HttpEntity<>(rootBody, rootHeaders);
 
-                @SuppressWarnings("unchecked")
                 Map<String, Object> rootResp = restTemplate.postForObject(rootContainerUrl, rootRequest, Map.class);
                 if (rootResp == null || !rootResp.containsKey("id")) {
                     throw new RuntimeException("Failed to create Instagram Carousel root container.");
@@ -328,7 +326,6 @@ public class PublisherService {
                 publishHeaders.setContentType(MediaType.APPLICATION_JSON);
                 HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, publishHeaders);
 
-                @SuppressWarnings("unchecked")
                 Map<String, Object> finalResp = restTemplate.postForObject(publishUrl, publishRequest, Map.class);
                 post.setExternalPostId((String) finalResp.get("id"));
                 logger.info("🚡 Instagram Carousel Successful: {}", post.getExternalPostId());
@@ -339,14 +336,18 @@ public class PublisherService {
             }
         } else {
             // STEP 1: Create media container
+            // We keep image_url and access_token in the query string for ingestion reliability,
+            // but move the caption to the BODY to avoid URL-encoding artifacts like %20.
             String containerUrl = UriComponentsBuilder.fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media")
                     .queryParam("image_url", getAccessibleUrl(post.getImageUrl()))
-                    .queryParam("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""))
                     .queryParam("access_token", accessToken)
                     .toUriString();
+            
+            MultiValueMap<String, String> containerBody = new LinkedMultiValueMap<>();
+            containerBody.add("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
 
             Map<String, Object> containerResponse = executeMetaCallWithRetry(() -> 
-                restTemplate.postForObject(containerUrl, null, Map.class));
+                restTemplate.postForObject(containerUrl, containerBody, Map.class));
                 
             String creationId = (String) containerResponse.get("id");
             
@@ -369,6 +370,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void waitForMediaStatus(String creationId, String accessToken) {
         boolean isReady = false;
         int retries = 0;
@@ -431,6 +433,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void publishLinkedInCarousel(Post post, String personUrn, String accessToken) {
         try {
             CarouselResponse carousel = objectMapper.readValue(post.getCarouselContent(), CarouselResponse.class);
@@ -486,6 +489,7 @@ public class PublisherService {
         return headers;
     }
 
+    @SuppressWarnings("unchecked")
     private void sendLinkedInPost(Map<String, Object> body, String accessToken, Post post) {
         String url = "https://api.linkedin.com/v2/posts";
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, getLinkedInHeaders(accessToken));
@@ -496,6 +500,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private String uploadImageToLinkedIn(String imageUrl, String personUrn, String accessToken) {
         // Step 1: Initialize Upload
         String initUrl = "https://api.linkedin.com/v2/images?action=initializeUpload";
@@ -543,6 +548,7 @@ public class PublisherService {
         return imageUrn;
     }
 
+    @SuppressWarnings("unchecked")
     private void publishToInstagramStory(Post post, String igId, String accessToken) {
         try {
             // Step 1: Create Stories Media Container
@@ -582,6 +588,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void publishToFacebookStory(Post post, String pageId, String accessToken) {
         try {
             // Step 1: Upload image or video as unpublished
@@ -618,6 +625,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void publishReelToInstagram(Post post, String igId, String accessToken) {
         try {
             // For Instagram Reels, we need a video_url. If it's missing, fail early.
@@ -664,6 +672,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void publishReelToFacebook(Post post, String pageId, String accessToken) {
         try {
             if (post.getVideoUrl() == null || post.getVideoUrl().isEmpty()) {
@@ -739,6 +748,7 @@ public class PublisherService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void publishPollToX(Post post, String accessToken) {
         String url = "https://api.twitter.com/2/tweets";
         HttpHeaders headers = new HttpHeaders();
