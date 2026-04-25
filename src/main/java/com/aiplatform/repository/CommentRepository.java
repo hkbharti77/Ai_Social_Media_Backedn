@@ -11,4 +11,5 @@ import java.util.List;
 public interface CommentRepository extends JpaRepository<Comment, Long> {
     List<Comment> findByUserOrderByCreatedAtDesc(User user);
     List<Comment> findByUserAndIsRepliedOrderByCreatedAtDesc(User user, boolean isReplied);
+    boolean existsByExternalCommentId(String externalCommentId);
 }

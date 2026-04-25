@@ -280,7 +280,7 @@ public class PublisherService {
                 for (CarouselSlide slide : carousel.getSlides()) {
                     String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
                     Map<String, Object> slideBody = new HashMap<>();
-                    slideBody.put("image_url", getAccessibleUrl(slide.getImageUrl()));
+                    slideBody.put("image_url", getAccessibleUrl(slide.getImageUrl()).trim());
                     slideBody.put("media_type", "IMAGE");
                     slideBody.put("is_carousel_item", "true");
                     slideBody.put("access_token", accessToken);
@@ -336,16 +336,22 @@ public class PublisherService {
             }
         } else {
             // STEP 1: Create media container
-            // We keep image_url and access_token in the query string for ingestion reliability,
-            // but move the caption to the BODY to avoid URL-encoding artifacts like %20.
-            String containerUrl = UriComponentsBuilder.fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media")
-                    .queryParam("image_url", getAccessibleUrl(post.getImageUrl()))
-                    .queryParam("access_token", accessToken)
-                    .toUriString();
+            // Using Form-Data (application/x-www-form-urlencoded) for all parameters.
+            // This is the most robust method for long captions and multi-region fetches.
+            String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
             
             MultiValueMap<String, String> containerBody = new LinkedMultiValueMap<>();
+            String cleanUrl = getAccessibleUrl(post.getImageUrl()).trim();
+            if (cleanUrl.endsWith(".")) {
+                cleanUrl = cleanUrl.substring(0, cleanUrl.length() - 1);
+            }
+            logger.info("ℹ️ Sending URL to Instagram: [{}]", cleanUrl);
+            containerBody.add("image_url", cleanUrl);
+            containerBody.add("media_type", "IMAGE");
             containerBody.add("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
+            containerBody.add("access_token", accessToken);
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> containerResponse = executeMetaCallWithRetry(() -> 
                 restTemplate.postForObject(containerUrl, containerBody, Map.class));
                 
@@ -554,7 +560,7 @@ public class PublisherService {
             // Step 1: Create Stories Media Container
             String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
             Map<String, Object> body = new HashMap<>();
-            body.put("image_url", getAccessibleUrl(post.getImageUrl()));
+            body.put("image_url", getAccessibleUrl(post.getImageUrl()).trim());
             body.put("media_type", "STORIES");
             body.put("access_token", accessToken);
 
@@ -636,7 +642,7 @@ public class PublisherService {
             // Step 1: Create Media Container for REELS
             String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
             Map<String, Object> body = new HashMap<>();
-            body.put("video_url", post.getVideoUrl());
+            body.put("video_url", post.getVideoUrl().trim());
             body.put("media_type", "REELS");
             body.put("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
             body.put("access_token", accessToken);
@@ -787,9 +793,16 @@ public class PublisherService {
      * This ensures Meta's crawlers can fetch the image even if the bucket is restricted.
      */
     private String getAccessibleUrl(String imageUrl) {
-        // We revert to returning the original URL because Meta (Instagram/Facebook) 
-        // often performs a HEAD request before a GET. Presigned URLs for GET will fail HEAD requests.
-        // User's S3 bucket is configured for public read of these media assets.
+        if (imageUrl == null) return null;
+        
+        // Meta (Instagram) crawlers sometimes struggle with virtual-hosted S3 URLs 
+        // (bucket.s3.region.amazonaws.com). Converting to regional path-style 
+        // (s3.region.amazonaws.com/bucket) is often more robust.
+        if (imageUrl.contains(".s3.ap-south-1.amazonaws.com/")) {
+            return imageUrl.replace("gyanvaniai-prod-bucket.s3.ap-south-1.amazonaws.com/", 
+                                   "s3.ap-south-1.amazonaws.com/gyanvaniai-prod-bucket/");
+        }
+        
         return imageUrl;
     }
 

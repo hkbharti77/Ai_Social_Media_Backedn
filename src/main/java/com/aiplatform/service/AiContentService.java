@@ -8,7 +8,10 @@ import com.aiplatform.model.BrandVoiceMode;
 import static com.aiplatform.model.BrandVoiceMode.*;
 import com.aiplatform.model.AiUsageLog;
 import com.aiplatform.repository.AiUsageLogRepository;
+import com.aiplatform.repository.BusinessProfileRepository;
 import com.aiplatform.repository.UserRepository;
+import com.aiplatform.model.User;
+import com.aiplatform.model.SubscriptionTier;
 import com.aiplatform.util.SecurityUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,9 +19,9 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -62,6 +65,8 @@ public class AiContentService {
     private final DistributedLockService lockService;
     private final AiUsageLogRepository aiUsageLogRepository;
     private final UserRepository userRepository;
+    private final BusinessProfileRepository businessProfileRepository;
+    private final GeminiCacheService geminiCacheService;
 
     @Value("${spring.ai.google.genai.api-key}")
     private String apiKey;
@@ -99,7 +104,11 @@ public class AiContentService {
             Identify 5 specific "Strategic Gaps" in their business where "{senderName}"'s {senderNiche} solutions can solve their problems and grow their ROI.
             
             Return JSON format exactly like this structure:
-            {jsonStructure}
+            {
+                "strategySummary": "...",
+                "potentialRoi": "...",
+                "gaps": [{"title": "...", "description": "...", "recommedation": "..."}]
+            }
             """;
 
     private static final String CONTENT_STRATEGY_TEMPLATE = """
@@ -108,7 +117,10 @@ public class AiContentService {
             Give 5 specific post ideas their competitors are NOT doing. Each idea should be highly specific, actionable and creative.
             
             Return JSON format exactly like this structure:
-            {jsonStructure}
+            {
+                "analysis": "...",
+                "ideas": [{"topic": "...", "whyItWorks": "...", "postDraft": "..."}]
+            }
             """;
 
     private static final String PERFORMANCE_PREDICTOR_TEMPLATE = """
@@ -122,7 +134,7 @@ public class AiContentService {
             Post Draft: <user_input>{postDraft}</user_input>
             
             Return JSON format exactly like this structure:
-            {jsonStructure}
+            {"score": 85, "reasoning": "Detailed analysis...", "suggestions": ["Improvement 1", "Improvement 2"]}
             """;
 
     private static final String REVIEW_REPLY_TEMPLATE = """
@@ -149,7 +161,7 @@ public class AiContentService {
             {brandVoiceContext}
             
             Return ONLY a JSON object exactly like this structure:
-            {jsonStructure}
+            {"memeConcept": "...", "caption": "...", "imageSuggestion": "..."}
             """;
 
     private static final String THREAD_TEMPLATE = """
@@ -171,7 +183,7 @@ public class AiContentService {
             5. Length: Each tweet MUST be under 280 characters.
             
             Return a JSON object exactly like this structure:
-            {jsonStructure}
+            {"thread": [{"tweet": "Hook tweet..."}, {"tweet": "Value tweet..."}, {"tweet": "CTA tweet..."}]}
             """;
 
     private static final String VIRAL_OPPORTUNITY_TEMPLATE = """
@@ -184,7 +196,7 @@ public class AiContentService {
             3. A 'Draft Post': A high-impact post that fills this gap.
             
             Return ONLY a JSON object exactly like this structure:
-            {jsonStructure}
+            {"trend": "...", "viralGap": "...", "draftPost": "..."}
             """;
 
     private static final String CAROUSEL_TEMPLATE = """
@@ -198,7 +210,7 @@ public class AiContentService {
             {visualContext}
             
             Return a JSON object exactly like this structure:
-            {jsonStructure}
+            {{"caption": "Main post caption...", "slides": [{{"slideNumber": 1, "slideText": "...", "imageSuggestion": "..."}}, {{"slideNumber": 2, "slideText": "...", "imageSuggestion": "..."}}]}}
             
             Return ONLY valid JSON wrapped in curly braces. 
             Crucial: The 'imageSuggestion' must NOT include technical labels, buzzwords, or hex codes (e.g., #FFFFFF). 
@@ -216,7 +228,7 @@ public class AiContentService {
             {visualContext}
             
             Return a JSON object exactly like this structure:
-            {jsonStructure}
+            {{"caption": "Catchy story caption...", "hashtags": ["#StoryTag"], "imageSuggestion": "Describe a vertical scene..."}}
             
             Return ONLY valid JSON wrapped in curly braces. Story captions should be short (max 150 chars). 
             Crucial: The 'imageSuggestion' must NOT include technical labels, buzzwords, or hex codes (e.g., #FFFFFF). 
@@ -236,7 +248,7 @@ public class AiContentService {
             {visualContext}
             
             Return a JSON object exactly like this structure:
-            {jsonStructure}
+            {{"posts": [{{"caption": "...", "hashtags": ["#..."], "imageSuggestion": "..."}}]}}
             
             Return ONLY valid JSON wrapped in curly braces. Create exactly {count} distinct posts focusing on different angles from the extracted content.
             Crucial: The 'imageSuggestion' must NOT include technical labels, buzzwords, or hex codes (e.g., #FFFFFF). 
@@ -257,7 +269,7 @@ public class AiContentService {
             3. Tone: {tone}.
             
             Return a JSON object exactly like this structure:
-            {jsonStructure}
+            {{"caption": "Question for the poll...", "options": ["Option 1", "Option 2"], "hashtags": ["#Poll"], "imageSuggestion": "..."}}
             
             Return ONLY valid JSON wrapped in curly braces. No emojis in options unless specifically requested.
             
@@ -282,7 +294,7 @@ public class AiContentService {
             3. Call to Action (CTA).
             
             Return ONLY a JSON object exactly like this structure:
-            {jsonStructure}
+            {{"caption": "...", "hashtags": ["#..."], "videoScript": "...", "audioSuggestion": "...", "imageSuggestion": "..."}}
             
             Return ONLY valid JSON wrapped in curly braces. 
             Crucial: The 'imageSuggestion' must act as a 'Thumbnail/Storyboard' shot for this video. 
@@ -293,27 +305,22 @@ public class AiContentService {
             """;
 
     private static final String CAMPAIGN_TEMPLATE = """
-            You are a high-level Social Media Strategy Director for {businessName} ({niche}).
-            Create a coordinated, 1-week Marketing Campaign based on this GOAL:
-            <user_input>{goal}</user_input>
-            
+            Create a coordinated, 1-week Marketing Campaign based on this GOAL: {goal}.
             Target audience: {audience}.
             Brand Tone: {tone}.
-            
-            Your response must include:
-            1. A 'strategySummary': High-level approach for the week.
-            2. A 'visualTheme': Consistent aesthetic guide for all campaign imagery.
-            3. Detailed assets across multiple platforms:
-               - 3 Standard Posts (Engage, Hype, Promo).
-               - 2 Vertical Stories.
-               - 1 Viral Reel Script with Thumbnail suggestion.
-               - A shared set of viral hashtags.
             
             Visual Brand Context:
             {visualContext}
             
             Return a JSON object exactly like this structure:
-            {jsonStructure}
+            {{
+                "strategySummary": "...",
+                "visualTheme": "...",
+                "posts": [{{"caption": "...", "hashtags": ["#..."], "imageSuggestion": "..."}}],
+                "stories": [{{"caption": "...", "hashtags": ["#..."], "imageSuggestion": "..."}}],
+                "reel": {{"caption": "...", "hashtags": ["#..."], "videoScript": "...", "audioSuggestion": "...", "imageSuggestion": "..."}},
+                "hashtags": ["#Campaign", "#Viral"]
+            }}
             
             Return ONLY valid JSON wrapped in curly braces. No extra text.
             Images must describe scenes, not words. No hex codes.
@@ -347,12 +354,12 @@ public class AiContentService {
             
             Comment: <user_input>{commentText}</user_input>
             
-            Return a JSON object exactly like this:
-            {
+            Return a JSON object exactly like this structure:
+            {{
               "sentiment": "POSITIVE" | "NEGATIVE" | "QUESTION" | "SPAM",
               "priority": "HIGH" | "MEDIUM" | "LOW",
               "reason": "Brief explanation why"
-            }
+            }}
             """;
 
     public GeneratedPost generatePost(BusinessProfile bp, String userCmd, Long userId, String modelId, PostGenerationRequest request, boolean skipCreditDeduction) {
@@ -382,20 +389,21 @@ public class AiContentService {
         if (!skipCreditDeduction) {
             deductPersonalizationCredits(userId, voiceMode);
         }
-        String brandVoiceContext = buildBrandVoiceContext(bp, voiceMode);
 
-        String visualContext = buildVisualContext(bp);
+        // Cache Management
+        String cacheId = resolveGeminiCacheId(bp, finalModelId);
+        String finalVisualContext = (cacheId != null) ? "[Using Cached Brand Identity]" : buildVisualContext(bp);
+        String finalBrandVoiceContext = (cacheId != null) ? "" : buildBrandVoiceContext(bp, voiceMode);
+
         PromptTemplate pt = new PromptTemplate(CAPTION_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
                 "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
                 "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
-                "tone", bp.getBrandTone() != null ? bp.getBrandTone() : "professional",
                 "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general",
                 "preferredHashtags", bp.getPreferredHashtags() != null ? bp.getPreferredHashtags() : "",
                 "command", guardInput(userCmd),
-                "visualContext", visualContext,
-                "brandVoiceContext", brandVoiceContext,
-                "jsonStructure", "{\"caption\": \"...\", \"hashtags\": [\"#...\", \"...\"], \"imageSuggestion\": \"Detailed description of a professional photo or graphic...\"}"
+                "visualContext", finalVisualContext,
+                "brandVoiceContext", finalBrandVoiceContext
         ));
 
         logger.info("🚀 Generating AI post [Model: {}] for user: {}", finalModelId, userId);
@@ -405,12 +413,21 @@ public class AiContentService {
             String content;
             try {
                 double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
-                ChatResponse response = chatClient.prompt(prompt)
-                        .options(GoogleGenAiChatOptions.builder().temperature(temperature).build())
-                        .call().chatResponse();
                 
-                content = response.getResult().getOutput().getText();
-                logUsage(userId, finalModelId, "POST_GENERATION", response.getMetadata().getUsage(), userCmd, null);
+                String responseText;
+                if (cacheId != null) {
+                    // Direct REST call to support Caching
+                    responseText = callGeminiApiWithCache(cacheId, prompt, finalModelId, temperature);
+                } else {
+                    // Standard Spring AI call
+                    ChatResponse response = chatClient.prompt(prompt)
+                            .options(GoogleGenAiChatOptions.builder().temperature(temperature).build())
+                            .call().chatResponse();
+                    responseText = response.getResult().getOutput().getText();
+                    logUsage(userId, finalModelId, "POST_GENERATION", response.getMetadata().getUsage(), userCmd, null);
+                }
+                
+                content = responseText;
             } catch (Exception e) {
                 logger.error("❌ AI Chat Generation failed: {}", e.getMessage(), e);
                 if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -509,8 +526,11 @@ public class AiContentService {
         }
 
         String voiceMode = (request != null) ? request.getVoiceMode() : null;
-        String brandVoiceContext = buildBrandVoiceContext(bp, voiceMode);
-        String visualContext = buildVisualContext(bp);
+        
+        // Cache Management
+        String cacheId = resolveGeminiCacheId(bp, finalModelId);
+        String finalVisualContext = (cacheId != null) ? "[Using Cached Brand Identity]" : buildVisualContext(bp);
+        String finalBrandVoiceContext = (cacheId != null) ? "" : buildBrandVoiceContext(bp, voiceMode);
 
         PromptTemplate pt = new PromptTemplate(STORY_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
@@ -518,9 +538,8 @@ public class AiContentService {
                 "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
                 "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general audience",
                 "command", guardInput(userCmd),
-                "visualContext", visualContext,
-                "brandVoiceContext", brandVoiceContext,
-                "jsonStructure", "{\"caption\": \"Catchy story caption...\", \"hashtags\": [\"#StoryTag\"], \"imageSuggestion\": \"Describe a vertical scene...\"}"
+                "visualContext", finalVisualContext,
+                "brandVoiceContext", finalBrandVoiceContext
         ));
 
         logger.info("📱 Generating AI story [Model: {}] for user: {}", finalModelId, userId);
@@ -528,11 +547,18 @@ public class AiContentService {
         String content;
         try {
             double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
-            ChatResponse response = chatClient.prompt(prompt)
-                    .options(GoogleGenAiChatOptions.builder().temperature(temperature).build())
-                    .call().chatResponse();
-            content = response.getResult().getOutput().getText();
-            logUsage(userId, finalModelId, "STORY_GENERATION", response.getMetadata().getUsage(), userCmd, null);
+            
+            String responseText;
+            if (cacheId != null) {
+                responseText = callGeminiApiWithCache(cacheId, prompt, finalModelId, temperature);
+            } else {
+                ChatResponse response = chatClient.prompt(prompt)
+                        .options(GoogleGenAiChatOptions.builder().temperature(temperature).build())
+                        .call().chatResponse();
+                responseText = response.getResult().getOutput().getText();
+                logUsage(userId, finalModelId, "STORY_GENERATION", response.getMetadata().getUsage(), userCmd, null);
+            }
+            content = responseText;
         } catch (Exception e) {
             logger.error("❌ AI Story Generation failed: {}", e.getMessage());
             throw new RuntimeException("AI Generation failed.", e);
@@ -561,8 +587,8 @@ public class AiContentService {
     }
 
     public List<String> generateThread(BusinessProfile bp, String userCmd, Long userId, String modelId) {
-        String finalModelId = (modelId != null && !modelId.isEmpty()) ? modelId : 
-                             SecurityUtils.getCurrentUser().get().getSubscriptionTier().getDefaultImageModel();
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, modelId);
 
         lockService.executeWithLock("credits:" + userId, Duration.ofSeconds(5), Duration.ofSeconds(10), () -> {
             subscriptionService.checkAndDecrementCredits(userId, finalModelId, "AI Thread Generation");
@@ -612,6 +638,9 @@ public class AiContentService {
     }
 
     public ContentGapResponse generateGapAnalysis(ContentGapRequest request, BusinessProfile sender, Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, "gemini-1.5-flash");
+        
         lockService.executeWithLock("credits:" + userId, Duration.ofSeconds(5), Duration.ofSeconds(10), () -> {
             subscriptionService.deductFixedCredits(userId, 10.0, "B2B Growth Gap Analysis");
             return null;
@@ -631,7 +660,7 @@ public class AiContentService {
         try {
             ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
             content = response.getResult().getOutput().getText();
-            logUsage(userId, "gemini-1.5-flash", "GAP_ANALYSIS", response.getMetadata().getUsage(), "Target: " + request.getBusinessType() + " in " + request.getCity(), null);
+            logUsage(userId, finalModelId, "GAP_ANALYSIS", response.getMetadata().getUsage(), "Target: " + request.getBusinessType() + " in " + request.getCity(), null);
         } catch (Exception e) {
             logger.error("AI Analysis failed: {}", e.getMessage(), e);
             if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -650,6 +679,9 @@ public class AiContentService {
     }
 
     public ContentGapResponse generateContentStrategy(BusinessProfile bp, Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, "gemini-1.5-flash");
+        
         lockService.executeWithLock("credits:" + userId, Duration.ofSeconds(5), Duration.ofSeconds(10), () -> {
             subscriptionService.deductFixedCredits(userId, 15.0, "AI Content Strategy Creation");
             return null;
@@ -667,7 +699,7 @@ public class AiContentService {
         try {
             ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
             content = response.getResult().getOutput().getText();
-            logUsage(userId, "gemini-1.5-flash", "CONTENT_STRATEGY", response.getMetadata().getUsage(), "Strategy for: " + bp.getBusinessName(), null);
+            logUsage(userId, finalModelId, "CONTENT_STRATEGY", response.getMetadata().getUsage(), "Strategy for: " + bp.getBusinessName(), null);
         } catch (Exception e) {
             logger.error("❌ Content Strategy failed: {}", e.getMessage(), e);
             if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -686,6 +718,9 @@ public class AiContentService {
     }
 
     public JsonNode predictPerformance(String draft, BusinessProfile bp, Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, "gemini-1.5-flash");
+        
         lockService.executeWithLock("credits:" + userId, Duration.ofSeconds(5), Duration.ofSeconds(10), () -> {
             subscriptionService.deductFixedCredits(userId, 5.0, "AI Performance Prediction");
             return null;
@@ -704,7 +739,7 @@ public class AiContentService {
         try {
             ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
             content = response.getResult().getOutput().getText();
-            logUsage(userId, "gemini-1.5-flash", "PERFORMANCE_PREDICTION", response.getMetadata().getUsage(), draft.length() > 100 ? draft.substring(0, 100) + "..." : draft, null);
+            logUsage(userId, finalModelId, "PERFORMANCE_PREDICTION", response.getMetadata().getUsage(), draft.length() > 100 ? draft.substring(0, 100) + "..." : draft, null);
         } catch (Exception e) {
             logger.error("AI Performance Prediction failed: {}", e.getMessage(), e);
             if (e.getMessage().contains("429") || e.getMessage().toLowerCase().contains("quota")) {
@@ -723,6 +758,9 @@ public class AiContentService {
     }
 
     public String generateReviewReply(String businessName, String reviewText, int rating, Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, "gemini-1.5-flash");
+        
         PromptTemplate pt = new PromptTemplate(REVIEW_REPLY_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
                 "businessName", businessName != null ? businessName : "our business",
@@ -732,7 +770,7 @@ public class AiContentService {
 
         try {
             ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
-            logUsage(userId, "gemini-1.5-flash", "REVIEW_REPLY", response.getMetadata().getUsage(), reviewText.length() > 100 ? reviewText.substring(0, 100) + "..." : reviewText, null);
+            logUsage(userId, finalModelId, "REVIEW_REPLY", response.getMetadata().getUsage(), reviewText.length() > 100 ? reviewText.substring(0, 100) + "..." : reviewText, null);
             return response.getResult().getOutput().getText();
         } catch (Exception e) {
             logger.error("AI Review Reply failed: {}", e.getMessage(), e);
@@ -741,7 +779,8 @@ public class AiContentService {
     }
 
     public MemeResponse generateMeme(BusinessProfile bp, String modelId, String command, Long userId) {
-        String finalModelId = (modelId != null && !modelId.isEmpty()) ? modelId : "gemini-2.5-flash-image";
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedImageModel(user, modelId);
         
         String commandText = (command != null && !command.trim().isEmpty()) 
                 ? "SPECIFIC INSTRUCTION / TOPIC: " + command.trim() 
@@ -798,6 +837,9 @@ public class AiContentService {
     }
 
     public ViralOpportunityResponse generateViralOpportunity(BusinessProfile bp, String topic, Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, "gemini-1.5-flash");
+        
         PromptTemplate pt = new PromptTemplate(VIRAL_OPPORTUNITY_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
                 "niche", bp.getNiche() != null ? bp.getNiche() : "general business",
@@ -809,7 +851,7 @@ public class AiContentService {
         try {
             ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
             content = response.getResult().getOutput().getText();
-            logUsage(userId, "gemini-1.5-flash", "VIRAL_OPPORTUNITY", response.getMetadata().getUsage(), topic, null);
+            logUsage(userId, finalModelId, "VIRAL_OPPORTUNITY", response.getMetadata().getUsage(), topic, null);
         } catch (Exception e) {
             logger.error("Viral Opportunity Generation failed: {}", e.getMessage());
             throw new RuntimeException("Viral Opportunity Generation failed.");
@@ -825,8 +867,8 @@ public class AiContentService {
     }
 
     public CarouselResponse generateCarousel(BusinessProfile bp, CarouselGenerationRequest request, Long userId, String modelId, boolean skipCreditDeduction) {
-        String finalModelId = (modelId != null && !modelId.isEmpty()) ? modelId : 
-                             SecurityUtils.getCurrentUser().get().getSubscriptionTier().getDefaultImageModel();
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, modelId);
 
         // Handle Aspect Ratio Override
         if (request != null && request.getAspectRatio() != null && !request.getAspectRatio().isEmpty()) {
@@ -852,17 +894,20 @@ public class AiContentService {
         if (!skipCreditDeduction) {
             deductPersonalizationCredits(userId, voiceMode);
         }
-        String brandVoiceContext = buildBrandVoiceContext(bp, voiceMode);
+        
+        // Cache Management
+        String cacheId = resolveGeminiCacheId(bp, finalModelId);
+        String finalVisualContext = (cacheId != null) ? "[Using Cached Brand Identity]" : buildVisualContext(bp);
+        String finalBrandVoiceContext = (cacheId != null) ? "" : buildBrandVoiceContext(bp, voiceMode);
 
-        String visualContext = buildVisualContext(bp);
         PromptTemplate pt = new PromptTemplate(CAROUSEL_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
                 "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
                 "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
                 "tone", bp.getBrandTone() != null ? bp.getBrandTone() : "professional",
                 "targetAudience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general",
-                "visualContext", visualContext,
-                "brandVoiceContext", brandVoiceContext,
+                "visualContext", finalVisualContext,
+                "brandVoiceContext", finalBrandVoiceContext,
                 "preferredHashtags", bp.getPreferredHashtags() != null ? bp.getPreferredHashtags() : "",
                 "command", guardInput(request.getCommand()),
                 "slideCount", slideCount,
@@ -876,25 +921,24 @@ public class AiContentService {
 
         try {
             String content;
-            try {
-                double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
+            double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
+            
+            String responseText;
+            if (cacheId != null) {
+                responseText = callGeminiApiWithCache(cacheId, prompt, finalModelId, temperature);
+            } else {
                 ChatResponse response = chatClient.prompt(prompt)
-                        .options(GoogleGenAiChatOptions.builder()
-                                .temperature(temperature)
-                                .build())
+                        .options(GoogleGenAiChatOptions.builder().temperature(temperature).build())
                         .call()
                         .chatResponse();
-                
-                content = response.getResult().getOutput().getText();
+                responseText = response.getResult().getOutput().getText();
                 logUsage(userId, finalModelId, "CAROUSEL_GENERATION", response.getMetadata().getUsage(), request.getCommand(), null);
-            } catch (Exception e) {
-                logger.error("❌ AI Carousel Generation failed: {}", e.getMessage(), e);
-                throw new RuntimeException("AI Carousel Generation failed.", e);
             }
+            
+            content = responseText;
 
             try {
                 content = extractJsonResponse(content);
-                
                 CarouselResponse carouselResponse = objectMapper.readValue(content, CarouselResponse.class);
                 
                 // Generate Images for each slide
@@ -936,7 +980,10 @@ public class AiContentService {
     private String generateAndUploadImageInternal(String suggestion, String userCommand, Long userId, String modelId, BusinessProfile bp, int attempt) throws Exception {
         subscriptionService.checkImageStorageLimit(userId);
         
-        AiModelSelection meta = AiModelSelection.fromModelId(modelId);
+        // Use current user for tier lookup
+        User user = SecurityUtils.getCurrentUser().orElse(null);
+        String finalModelId = resolveAllowedImageModel(user, modelId);
+        AiModelSelection meta = AiModelSelection.fromModelId(finalModelId);
         String suffix = (meta.getProtocol() == ApiProtocol.GEMINI) ? ":generateContent" : ":predict";
         String url = String.format("%s/models/%s%s?key=%s", apiUrl, meta.getActualApiModelId(), suffix, apiKey);
 
@@ -946,6 +993,9 @@ public class AiContentService {
         parameters.put("sampleCount", 1);
         parameters.put("aspectRatio", aspectRatio);
 
+        // --- 1b. Cache Persona for Gemini Models ---
+        String cacheId = (meta.getProtocol() == ApiProtocol.GEMINI) ? resolveGeminiCacheId(bp, modelId) : null;
+        
         // --- 2. Construct Prompt: User Command + AI Suggestion + Business Profile ---
         StringBuilder personaPrompt = new StringBuilder();
         
@@ -959,51 +1009,50 @@ public class AiContentService {
         
         // 2c. Layer on Business Profile brand identity
         personaPrompt.append(". [Brand Identity]: ");
-        if (bp.getBusinessName() != null) personaPrompt.append("For ").append(bp.getBusinessName()).append(". ");
-        if (bp.getNiche() != null) personaPrompt.append("Industry: ").append(bp.getNiche()).append(". ");
-        personaPrompt.append("Mood: ").append(bp.getBrandMood() != null ? bp.getBrandMood() : "Professional");
-        personaPrompt.append(". Design Style: ").append(bp.getDesignStyle() != null ? bp.getDesignStyle() : "Modern");
-        if (bp.getBrandColors() != null && !bp.getBrandColors().isEmpty()) {
-            personaPrompt.append(". Brand Color Palette: ").append(getColorDescription(bp.getBrandColors()));
+        
+        if (cacheId == null) {
+            personaPrompt.append("As a 'Social Media Branding Photographer' for ").append(bp.getBusinessName()).append(" (Niche: ").append(bp.getNiche()).append("). ");
+            personaPrompt.append("Follow this strict style: Style: ").append(bp.getImageStyle()).append(". Mood: ").append(bp.getBrandMood()).append(". Design: ").append(bp.getDesignStyle());
+            if (bp.getBrandColors() != null && !bp.getBrandColors().isEmpty()) {
+                personaPrompt.append(". Brand Color Palette: ").append(getColorDescription(bp.getBrandColors()));
+            }
+            if (bp.getPeoplePreference() != null) personaPrompt.append(". People: ").append(bp.getPeoplePreference());
+            if (bp.getCompositionStyle() != null) personaPrompt.append(". Composition: ").append(bp.getCompositionStyle());
+            if (bp.getSubjectFocus() != null) personaPrompt.append(". Subject Focus: ").append(bp.getSubjectFocus());
+            if (bp.getLightingStyle() != null) personaPrompt.append(". Lighting: ").append(bp.getLightingStyle());
+            if (bp.getCameraAngle() != null) personaPrompt.append(". Angle: ").append(bp.getCameraAngle());
+            if (bp.getColorTemperature() != null) personaPrompt.append(". Color Temperature: ").append(bp.getColorTemperature());
+            if (bp.getBackgroundStyle() != null) personaPrompt.append(". Background: ").append(bp.getBackgroundStyle());
+        } else {
+            personaPrompt.append("[Using Cached Brand Style Persona]");
         }
         
-        // 2d. Layer on Art Direction from profile
-        if (bp.getImageStyle() != null) personaPrompt.append(". Image Style: ").append(bp.getImageStyle());
-        if (bp.getImageType() != null) personaPrompt.append(". Image Type: ").append(bp.getImageType());
-        if (bp.getPeoplePreference() != null) personaPrompt.append(". People: ").append(bp.getPeoplePreference());
-        if (bp.getCompositionStyle() != null) personaPrompt.append(". Composition: ").append(bp.getCompositionStyle());
-        if (bp.getSubjectFocus() != null) personaPrompt.append(". Subject Focus: ").append(bp.getSubjectFocus());
-        if (bp.getLightingStyle() != null) personaPrompt.append(". Lighting: ").append(bp.getLightingStyle());
-        if (bp.getCameraAngle() != null) personaPrompt.append(". Angle: ").append(bp.getCameraAngle());
-        if (bp.getColorTemperature() != null) personaPrompt.append(". Color Temperature: ").append(bp.getColorTemperature());
-        if (bp.getBackgroundStyle() != null) personaPrompt.append(". Background: ").append(bp.getBackgroundStyle());
-        
-        // 2e. Append Negative Prompt guardrails to ensure clean image
+        // 2e. Append Negative Prompt guardrails
         StringBuilder guardrails = new StringBuilder(". Avoid: ");
         if (bp.getNegativePrompt() != null && !bp.getNegativePrompt().isEmpty()) {
             guardrails.append(bp.getNegativePrompt()).append(", ");
         }
         
-        // Block text/hex codes if no text overlay is enabled
         if (bp.getTextOverlay() == null || !bp.getTextOverlay().isEnabled()) {
-            guardrails.append("TEXT, WORDS, LETTERS, TYPOGRAPHY, QUOTES, LOGOS, HEX CODES, LABELS, CAPTIONS, SIGNS, SUBTITLES, WATERMARKS, SIGNATURES. ");
+            guardrails.append("text, words, letters, typography, quotes, logos, hex codes, labels, signs, watermarks.");
         }
-        guardrails.append("BLURRY, DISTORTED, EXTRA LIMBS, DEFORMED FEATURES.");
+        guardrails.append(" blurry, distorted, extra limbs, deformed features.");
         
         personaPrompt.append(guardrails);
+        personaPrompt.append("\n\nACTUAL SCENE TO RENDER: ").append(suggestion);
         
         String enhancedPrompt = personaPrompt.toString();
 
         // --- 3. Construct Protocol-Specific Request ---
         Map<String, Object> requestBody = new HashMap<>();
+        if (cacheId != null) {
+            requestBody.put("cachedContent", cacheId);
+        }
+
         if (meta.getProtocol() == ApiProtocol.GEMINI) {
             // For Gemini models, we append constraints to the text prompt as it weights context
-            StringBuilder geminiBody = new StringBuilder(enhancedPrompt);
-            geminiBody.append("\n\n[Brand Constraints]:");
-            geminiBody.append("\n- Aspect Ratio: ").append(aspectRatio);
-            
             requestBody.put("contents", Collections.singletonList(Map.of(
-                "parts", Collections.singletonList(Map.of("text", geminiBody.toString()))
+                "parts", Collections.singletonList(Map.of("text", enhancedPrompt))
             )));
             
             // --- 4. Add Image Generation Config for 2026 Gemini Models ---
@@ -1019,7 +1068,8 @@ public class AiContentService {
                 Map.of("category", "HARM_CATEGORY_HATE_SPEECH", "threshold", "BLOCK_NONE"),
                 Map.of("category", "HARM_CATEGORY_HARASSMENT", "threshold", "BLOCK_NONE"),
                 Map.of("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold", "BLOCK_NONE"),
-                Map.of("category", "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold", "BLOCK_NONE")
+                Map.of("category", "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold", "BLOCK_NONE"),
+                Map.of("category", "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold", "BLOCK_NONE")
             );
             requestBody.put("safetySettings", safetySettings);
         } else {
@@ -1097,8 +1147,15 @@ public class AiContentService {
                 } else {
                     String reason = root.path("candidates").get(0).path("finishReason").asText();
                     logger.warn("⚠️ Image Gen response was 200 OK but imageBytes is NULL. Finish Reason: {}. Body: {}", reason, root.toString());
+                    
+                    if (("SAFETY".equals(reason) || "NO_IMAGE".equals(reason)) && attempt < 1) {
+                         logger.info("🔄 Re-attempting Image Gen with Simplified Artistic Prompt due to {} block...", reason);
+                         String fallbackCommand = "A beautiful artistic visual representation of " + suggestion;
+                         return generateAndUploadImageInternal(suggestion, fallbackCommand, userId, modelId, bp, attempt + 1);
+                    }
+                    
                     if ("SAFETY".equals(reason) || "NO_IMAGE".equals(reason)) {
-                         throw new RuntimeException("AI blocked image generation due to safety filters or complex prompt. Try a simpler or more artistic description.");
+                         throw new RuntimeException("AI blocked image generation due to safety filters or complex prompt. Try a simpler description.");
                     }
                 }
             }
@@ -1281,38 +1338,40 @@ public class AiContentService {
             throw new RuntimeException("Failed to extract content from the provided URL. Please make sure the URL is accessible.");
         }
 
-        String visualContext = buildVisualContext(bp);
-        logger.info("🚀 Generating AI repurposed content ({} posts) [Model: {}] for user: {}", count, finalModelId, userId);
+        // 2. Cache Management for Repurposing
+        // We prioritize caching the large scraped content over the brand bible if it's large enough
+        String cacheId = resolveRepurposeCacheId(bp, scrapedContent, finalModelId);
         
-        String jsonStructure = "{\"posts\": [";
-        for (int i = 0; i < count; i++) {
-            jsonStructure += "{\"caption\": \"...\", \"hashtags\": [\"#...\"], \"imageSuggestion\": \"...\"}" + (i < count - 1 ? ", " : "");
-        }
-        jsonStructure += "]}";
-        
+        String finalScrapedContent = (cacheId != null) ? "[Using Cached Scraped Content]" : scrapedContent;
+        String visualContext = (cacheId != null) ? "" : buildVisualContext(bp); // If we cache transcript, we don't cache bible here
+
         PromptTemplate pt = new PromptTemplate(REPURPOSE_TEMPLATE);
         Prompt prompt = pt.create(Map.of(
                 "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
                 "niche", bp.getNiche() != null ? bp.getNiche() : "generic",
                 "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general",
-                "scrapedContent", scrapedContent,
+                "scrapedContent", finalScrapedContent,
                 "visualContext", visualContext,
-                "count", count,
-                "jsonStructure", jsonStructure
+                "count", count
         ));
 
         String content;
         try {
             double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.7;
-            ChatResponse chatResponse = chatClient.prompt(prompt)
-                    .options(GoogleGenAiChatOptions.builder()
-                            .temperature(temperature)
-                            .build())
-                    .call()
-                    .chatResponse();
             
-            content = chatResponse.getResult().getOutput().getText();
-            logUsage(userId, finalModelId, "REPURPOSE_CONTENT", chatResponse.getMetadata().getUsage(), request.getUrl(), null);
+            String responseText;
+            if (cacheId != null) {
+                responseText = callGeminiApiWithCache(cacheId, prompt, finalModelId, temperature);
+            } else {
+                ChatResponse chatResponse = chatClient.prompt(prompt)
+                        .options(GoogleGenAiChatOptions.builder().temperature(temperature).build())
+                        .call()
+                        .chatResponse();
+                responseText = chatResponse.getResult().getOutput().getText();
+                logUsage(userId, finalModelId, "REPURPOSE_CONTENT", chatResponse.getMetadata().getUsage(), request.getUrl(), null);
+            }
+            
+            content = responseText;
         } catch (Exception e) {
             logger.error("❌ AI Repurpose Generation failed: {}", e.getMessage(), e);
             throw new RuntimeException("AI Repurpose Generation failed.", e);
@@ -1409,8 +1468,8 @@ public class AiContentService {
     }
 
     public CampaignResponse generateCampaign(BusinessProfile bp, CampaignGenerationRequest request, Long userId) {
-        String finalModelId = (request.getModelId() != null && !request.getModelId().isEmpty()) ? request.getModelId() : 
-                             SecurityUtils.getCurrentUser().get().getSubscriptionTier().getDefaultImageModel();
+        User user = userRepository.findById(userId).orElse(null);
+        String finalModelId = resolveAllowedChatModel(user, request != null ? request.getModelId() : null);
 
         // 1. Credit Deduction (Hardcoded Premium Campaign Rates)
         double totalCost;
@@ -1454,16 +1513,8 @@ public class AiContentService {
         String visualContext = buildVisualContext(bp);
         PromptTemplate pt = new PromptTemplate(CAMPAIGN_TEMPLATE);
         
-        String jsonStructure = """
-                {
-                    "strategySummary": "...",
-                    "visualTheme": "...",
-                    "posts": [{"caption": "...", "hashtags": ["#..."], "imageSuggestion": "..."}],
-                    "stories": [{"caption": "...", "hashtags": ["#..."], "imageSuggestion": "..."}],
-                    "reel": {"caption": "...", "hashtags": ["#..."], "videoScript": "...", "audioSuggestion": "...", "imageSuggestion": "..."},
-                    "hashtags": ["#Campaign", "#Viral"]
-                }
-                """;
+        String cacheId = resolveGeminiCacheId(bp, finalModelId);
+        String finalVisualContext = (cacheId != null) ? "[Using Cached Visual Identity]" : visualContext;
 
         Prompt prompt = pt.create(Map.of(
                 "businessName", bp.getBusinessName() != null ? bp.getBusinessName() : "our brand",
@@ -1471,8 +1522,7 @@ public class AiContentService {
                 "audience", bp.getTargetAudience() != null ? bp.getTargetAudience() : "general audience",
                 "goal", request.getGoal(),
                 "tone", bp.getBrandTone() != null ? bp.getBrandTone() : "professional",
-                "visualContext", visualContext,
-                "jsonStructure", jsonStructure
+                "visualContext", finalVisualContext
         ));
 
         logger.info("⚔️ Generating Campaign Genius [Model: {}] for goal: {}", finalModelId, request.getGoal());
@@ -1481,14 +1531,20 @@ public class AiContentService {
             String content;
             try {
                 double temperature = (bp.getCreativityLevel() != null) ? bp.getCreativityLevel() : 0.8;
-                ChatResponse response = chatClient.prompt(prompt)
-                        .options(GoogleGenAiChatOptions.builder()
-                                .temperature(temperature)
-                                .build())
-                        .call()
-                        .chatResponse();
-                content = response.getResult().getOutput().getText();
-                logUsage(userId, finalModelId, "CAMPAIGN_GENERATION", response.getMetadata().getUsage(), request.getGoal(), null);
+                
+                String responseText;
+                if (cacheId != null) {
+                    responseText = callGeminiApiWithCache(cacheId, prompt, finalModelId, temperature);
+                } else {
+                    ChatResponse response = chatClient.prompt(prompt)
+                            .options(GoogleGenAiChatOptions.builder().temperature(temperature).build())
+                            .call()
+                            .chatResponse();
+                    responseText = response.getResult().getOutput().getText();
+                    logUsage(userId, finalModelId, "CAMPAIGN_GENERATION", response.getMetadata().getUsage(), request.getGoal(), null);
+                }
+                
+                content = responseText;
             } catch (Exception e) {
                 String msg = e.getMessage() != null ? e.getMessage() : "";
                 if (msg.contains("429") || msg.toLowerCase().contains("quota")) {
@@ -1869,5 +1925,150 @@ public class AiContentService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private String callGeminiApiWithCache(String cacheName, Prompt prompt, String modelId, double temperature) {
+        try {
+            // Map to standard Gemini names if it's our internal modelId
+            String actualModel = modelId;
+            if (actualModel.contains("flash")) actualModel = "gemini-1.5-flash-001";
+            else if (actualModel.contains("pro")) actualModel = "gemini-1.5-pro-001";
+
+            String url = String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", actualModel, apiKey);
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("cachedContent", cacheName);
+
+            // User message part
+            Map<String, Object> part = new HashMap<>();
+            part.put("text", prompt.getContents());
+
+            Map<String, Object> content = new HashMap<>();
+            content.put("role", "user");
+            content.put("parts", Collections.singletonList(part));
+
+            requestBody.put("contents", Collections.singletonList(content));
+
+            Map<String, Object> generationConfig = new HashMap<>();
+            generationConfig.put("temperature", temperature);
+            generationConfig.put("responseMimeType", "application/json"); 
+            requestBody.put("generationConfig", generationConfig);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            logger.info("📦 Dispatching Direct Gemini Chat with Cache: {}", cacheName);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+
+            if (response.getStatusCode() == HttpStatus.OK) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                // Extract text from Gemini structure: candidates[0].content.parts[0].text
+                return root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
+            }
+            throw new RuntimeException("Gemini Direct API failed: " + response.getStatusCode());
+        } catch (Exception e) {
+            logger.error("❌ Direct Gemini API call failed: {}", e.getMessage());
+            throw new RuntimeException("AI Chat with cache failed.", e);
+        }
+    }
+
+    private String resolveRepurposeCacheId(BusinessProfile bp, String content, String modelId) {
+        if (content == null || content.length() < 3000) return null; // Too small for cache threshold (~750 tokens)
+
+        String currentHash = Integer.toHexString(content.hashCode());
+        
+        // Check if cache exists and is valid for this content
+        if (bp.getLastScrapedCacheId() != null && 
+            bp.getLastScrapedExpiry() != null && 
+            bp.getLastScrapedExpiry().isAfter(LocalDateTime.now()) &&
+            currentHash.equals(bp.getLastScrapedHash())) {
+            return bp.getLastScrapedCacheId();
+        }
+
+        // Map modelId to a caching-compatible name
+        String cacheModelId = modelId.contains("pro") ? "gemini-1.5-pro-001" : "gemini-1.5-flash-001";
+        
+        // Create cache for the scraped content (valid for 30 minutes)
+        String newCacheId = geminiCacheService.createCache(cacheModelId, content, 1800); 
+        
+        if (newCacheId != null) {
+            bp.setLastScrapedCacheId(newCacheId);
+            bp.setLastScrapedExpiry(LocalDateTime.now().plusMinutes(30));
+            bp.setLastScrapedHash(currentHash);
+            businessProfileRepository.save(bp);
+            return newCacheId;
+        }
+        
+        return null;
+    }
+
+    private String resolveGeminiCacheId(BusinessProfile bp, String modelId) {
+        // Only attempt caching if specifically enabled or for large profiles
+        String currentContent = buildVisualContext(bp) + buildBrandVoiceContext(bp, null);
+        
+        // Estimate token count crudely (chars / 4)
+        if (currentContent.length() < 3000) { // Approx 750 tokens, too small for cache threshold (~2048)
+            return null;
+        }
+
+        String currentHash = Integer.toHexString(currentContent.hashCode());
+
+        // Check if cache exists and is valid
+        if (bp.getGeminiCacheId() != null && 
+            bp.getGeminiCacheExpiry() != null && 
+            bp.getGeminiCacheExpiry().isAfter(LocalDateTime.now()) &&
+            currentHash.equals(bp.getGeminiCacheContentHash())) {
+            return bp.getGeminiCacheId();
+        }
+
+        // Map modelId to a caching-compatible name (REST API requires specific versions)
+        String cacheModelId = "gemini-1.5-flash-001"; 
+        if (modelId != null && modelId.contains("pro")) {
+            cacheModelId = "gemini-1.5-pro-001";
+        }
+        
+        String newCacheId = geminiCacheService.createCache(cacheModelId, currentContent, 3600); // 1 hour TTL
+        
+        if (newCacheId != null) {
+            bp.setGeminiCacheId(newCacheId);
+            bp.setGeminiCacheExpiry(LocalDateTime.now().plusHours(1));
+            bp.setGeminiCacheContentHash(currentHash);
+            businessProfileRepository.save(bp);
+            return newCacheId;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Tier Enforcement: Downgrades the requested model if it exceeds the user's tier permissions.
+     * Prevents "API Drain" from unauthorized expensive calls.
+     */
+    private String resolveAllowedChatModel(User user, String requestedModel) {
+        if (user == null || user.getSubscriptionTier() == null) return "gemini-2.5-flash-lite";
+        SubscriptionTier tier = user.getSubscriptionTier();
+        
+        // If the requested model is 'pro' but user is FREE or STANDARD, downgrade to tier default
+        if (requestedModel != null && requestedModel.contains("pro") && tier.getLevel() < 2) {
+            logger.warn("👮 Tier Enforcement: Downgrading model for user {}: {} -> {}", user.getEmail(), requestedModel, tier.getDefaultChatModel());
+            return tier.getDefaultChatModel();
+        }
+        
+        return (requestedModel != null && !requestedModel.isEmpty()) ? requestedModel : tier.getDefaultChatModel();
+    }
+
+    private String resolveAllowedImageModel(User user, String requestedModel) {
+        if (user == null || user.getSubscriptionTier() == null) return "gemini-3.1-flash-image";
+        SubscriptionTier tier = user.getSubscriptionTier();
+
+        // Check if requested model is premium (imagen-4-ultra or superior)
+        boolean isPremiumModel = requestedModel != null && (requestedModel.contains("ultra") || requestedModel.contains("pro-image"));
+        if (isPremiumModel && tier.getLevel() < 2) {
+            logger.warn("👮 Tier Enforcement: Downgrading IMAGE model for user {}: {} -> {}", user.getEmail(), requestedModel, tier.getDefaultImageModel());
+            return tier.getDefaultImageModel();
+        }
+
+        return (requestedModel != null && !requestedModel.isEmpty()) ? requestedModel : tier.getDefaultImageModel();
     }
 }

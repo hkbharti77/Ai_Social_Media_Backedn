@@ -2,6 +2,7 @@ package com.aiplatform.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "business_profiles")
@@ -10,6 +11,7 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString
 public class BusinessProfile implements Cloneable {
     @Override
     public Object clone() throws CloneNotSupportedException {
@@ -148,6 +150,26 @@ public class BusinessProfile implements Cloneable {
     @Column(name = "default_voice_mode")
     @Builder.Default
     private BrandVoiceMode defaultVoiceMode = BrandVoiceMode.STYLE_DNA;
+
+    // --- Gemini Context Caching Layer ---
+    @Column(name = "gemini_cache_id")
+    private String geminiCacheId;
+
+    @Column(name = "gemini_cache_expiry")
+    private LocalDateTime geminiCacheExpiry;
+
+    @Column(name = "gemini_cache_content_hash")
+    private String geminiCacheContentHash;
+
+    // --- Scraping & Repurposing Cache ---
+    @Column(name = "last_scraped_cache_id")
+    private String lastScrapedCacheId;
+
+    @Column(name = "last_scraped_expiry")
+    private LocalDateTime lastScrapedExpiry;
+
+    @Column(name = "last_scraped_hash")
+    private String lastScrapedHash;
 
     @Embeddable
     @Getter

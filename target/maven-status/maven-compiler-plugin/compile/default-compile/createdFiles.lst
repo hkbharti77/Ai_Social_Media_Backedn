@@ -162,4 +162,5 @@ com\aiplatform\dto\ContentGenerationDtos.class
 com\aiplatform\service\AdminAnalyticsService.class
 com\aiplatform\controller\MediaController.class
 com\aiplatform\controller\OwnerController.class
+com\aiplatform\service\GeminiCacheService.class
 com\aiplatform\dto\ContentGenerationDtos$CarouselGenerationRequest.class
