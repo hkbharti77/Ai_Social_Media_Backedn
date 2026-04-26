@@ -23,6 +23,7 @@ public class ContentGenerationDtos {
         private String modelId;
         private String aspectRatio;
         private String voiceMode;
+        private String contentType; // MARKETING or EDUCATIONAL
     }
 
     @Data
@@ -91,6 +92,7 @@ public class ContentGenerationDtos {
         @Size(max = 2000)
         private String command;
         private String voiceMode;
+        private String contentType; // MARKETING or EDUCATIONAL
     }
 
     @Data
@@ -135,6 +137,7 @@ public class ContentGenerationDtos {
         private String modelId;
         private String aspectRatio;
         private String voiceMode;
+        private String contentType; // MARKETING or EDUCATIONAL
     }
 
     @Data
@@ -171,6 +174,7 @@ public class ContentGenerationDtos {
         private int count = 5;
 
         private String aspectRatio;
+        private String contentType; // MARKETING or EDUCATIONAL
     }
 
     @Data
@@ -208,6 +212,7 @@ public class ContentGenerationDtos {
         private String modelId;
         private String aspectRatio;
         private String voiceMode;
+        private String contentType; // MARKETING or EDUCATIONAL
     }
 
     @Data

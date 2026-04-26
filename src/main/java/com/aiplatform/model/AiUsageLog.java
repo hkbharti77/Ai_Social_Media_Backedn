@@ -1,5 +1,7 @@
 package com.aiplatform.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -18,6 +20,7 @@ public class AiUsageLog {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "roles", "socialAccounts"})
     private User user;
 
     @Column(nullable = false)
@@ -35,6 +38,7 @@ public class AiUsageLog {
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @Column(columnDefinition = "TEXT")
+    @JsonProperty("promptText")
     private String prompt;
 
     @Column(name = "result_url")
