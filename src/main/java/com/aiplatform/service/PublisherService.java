@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -38,6 +39,12 @@ import java.util.stream.Collectors;
 public class PublisherService {
     private static final Logger logger = LoggerFactory.getLogger(PublisherService.class);
 
+    @Value("${fb.app.id}")
+    private String fbAppId;
+
+    @Value("${app.instagram.reel.skip-transcode:false}")
+    private boolean skipReelTranscode;
+
     @Autowired
     private PostRepository postRepository;
 
@@ -54,8 +61,35 @@ public class PublisherService {
     private S3Service s3Service;
 
     @Autowired
+    private VideoTranscodeService videoTranscodeService;
+
+    @Autowired
     private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // ─────────────────────────────────────────────────
+    // Runtime Configuration (for testing/debugging)
+    // ─────────────────────────────────────────────────
+
+    /**
+     * Get current transcoding bypass status
+     */
+    public boolean isSkipReelTranscode() {
+        return skipReelTranscode;
+    }
+
+    /**
+     * Set transcoding bypass at runtime (for testing)
+     * WARNING: This is for debugging only!
+     */
+    public void setSkipReelTranscode(boolean skipReelTranscode) {
+        this.skipReelTranscode = skipReelTranscode;
+        logger.warn("🔧 [DEBUG] Reel transcoding bypass changed to: {}", skipReelTranscode);
+    }
+
+    // ─────────────────────────────────────────────────
+    // Main Publishing Logic
+    // ─────────────────────────────────────────────────
 
     @Async
     public void publishPost(Post post) {
@@ -84,6 +118,10 @@ public class PublisherService {
                     
                     if (platform.equals("FACEBOOK")) {
                         if (Boolean.TRUE.equals(post.getIsStory())) {
+                            // Validate story has required media
+                            if (post.getImageUrl() == null || post.getImageUrl().trim().isEmpty()) {
+                                throw new RuntimeException("Facebook Story requires an image. Please add an image to this post.");
+                            }
                             publishToFacebookStory(post, account.getPageId(), token);
                         } else if (Boolean.TRUE.equals(post.getIsReel())) {
                             publishReelToFacebook(post, account.getPageId(), token);
@@ -93,6 +131,10 @@ public class PublisherService {
                         published = true;
                     } else if (platform.equals("INSTAGRAM")) {
                         if (Boolean.TRUE.equals(post.getIsStory())) {
+                            // Validate story has required media
+                            if (post.getImageUrl() == null || post.getImageUrl().trim().isEmpty()) {
+                                throw new RuntimeException("Instagram Story requires an image. Please add an image to this post.");
+                            }
                             publishToInstagramStory(post, account.getIgBusinessAccountId(), token);
                         } else if (Boolean.TRUE.equals(post.getIsReel())) {
                             publishReelToInstagram(post, account.getIgBusinessAccountId(), token);
@@ -148,14 +190,23 @@ public class PublisherService {
 
                 // 1. Upload each image as unpublished
                 for (CarouselSlide slide : carousel.getSlides()) {
-                    String photoUrl = "https://graph.facebook.com/v19.0/" + pageId + "/photos";
+                    // Build URL with access_token only in query params
+                    String photoUrl = UriComponentsBuilder
+                            .fromHttpUrl("https://graph.facebook.com/v19.0/" + pageId + "/photos")
+                            .queryParam("access_token", accessToken)
+                            .toUriString();
+                    
+                    // Send image URL and published flag in the body
                     MultiValueMap<String, String> photoBody = new LinkedMultiValueMap<>();
                     photoBody.add("url", getAccessibleUrl(slide.getImageUrl()));
                     photoBody.add("published", "false");
-                    photoBody.add("access_token", accessToken);
+                    
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+                    HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(photoBody, headers);
                     
                     @SuppressWarnings("unchecked")
-                    Map<String, Object> photoResp = restTemplate.postForObject(photoUrl, photoBody, Map.class);
+                    Map<String, Object> photoResp = restTemplate.postForObject(photoUrl, request, Map.class);
                     if (photoResp != null && photoResp.containsKey("id")) {
                         mediaFbids.add((String) photoResp.get("id"));
                     }
@@ -172,8 +223,12 @@ public class PublisherService {
                         .collect(Collectors.toList());
                 feedBody.put("attached_media", attachedMedia);
 
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(feedBody, headers);
+
                 @SuppressWarnings("unchecked")
-                Map<String, Object> response = restTemplate.postForObject(feedUrl, feedBody, Map.class);
+                Map<String, Object> response = restTemplate.postForObject(feedUrl, request, Map.class);
                 if (response != null && response.containsKey("id")) {
                     post.setExternalPostId((String) response.get("id"));
                     logger.info("\ud83d\udcf1 Facebook Multi-Photo Post Successful: {}", post.getExternalPostId());
@@ -186,12 +241,16 @@ public class PublisherService {
             }
         } else {
             // Single Image Post (Standard)
-            String url = "https://graph.facebook.com/v19.0/" + pageId + "/photos";
+            // Build URL with access_token only in query params
+            String url = UriComponentsBuilder
+                    .fromHttpUrl("https://graph.facebook.com/v19.0/" + pageId + "/photos")
+                    .queryParam("access_token", accessToken)
+                    .toUriString();
             
+            // Send image URL and caption in the body to avoid encoding issues
             MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
             body.add("url", getAccessibleUrl(post.getImageUrl()));
             body.add("caption", fullCaption);
-            body.add("access_token", accessToken);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -278,17 +337,23 @@ public class PublisherService {
 
                 // Step 1: Create Image Containers for each slide
                 for (CarouselSlide slide : carousel.getSlides()) {
-                    String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
-                    Map<String, Object> slideBody = new HashMap<>();
-                    slideBody.put("image_url", getAccessibleUrl(slide.getImageUrl()).trim());
-                    slideBody.put("media_type", "IMAGE");
-                    slideBody.put("is_carousel_item", "true");
-                    slideBody.put("access_token", accessToken);
+                    // Build URL with only access_token in query params
+                    String containerUrl = UriComponentsBuilder
+                            .fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media")
+                            .queryParam("access_token", accessToken)
+                            .toUriString();
+
+                    // Send image_url and other params in the body to avoid encoding issues
+                    MultiValueMap<String, String> slideBody = new LinkedMultiValueMap<>();
+                    slideBody.add("image_url", getAccessibleUrlForInstagramPhoto(slide.getImageUrl()));
+                    slideBody.add("media_type", "IMAGE");
+                    slideBody.add("is_carousel_item", "true");
 
                     HttpHeaders headers = new HttpHeaders();
-                    headers.setContentType(MediaType.APPLICATION_JSON);
-                    HttpEntity<Map<String, Object>> request = new HttpEntity<>(slideBody, headers);
+                    headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+                    HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(slideBody, headers);
 
+                    @SuppressWarnings("unchecked")
                     Map<String, Object> slideResp = restTemplate.postForObject(containerUrl, request, Map.class);
                     if (slideResp == null || !slideResp.containsKey("id")) {
                         throw new RuntimeException("Failed to create Instagram slide container.");
@@ -336,24 +401,27 @@ public class PublisherService {
             }
         } else {
             // STEP 1: Create media container
-            // Using Form-Data (application/x-www-form-urlencoded) for all parameters.
-            // This is the most robust method for long captions and multi-region fetches.
-            String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
+            // Send image_url in the body to avoid double-encoding issues with presigned URLs
+            String containerUrl = UriComponentsBuilder
+                    .fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media")
+                    .queryParam("access_token", accessToken)
+                    .toUriString();
             
+            // Send all parameters in the body
             MultiValueMap<String, String> containerBody = new LinkedMultiValueMap<>();
-            String cleanUrl = getAccessibleUrl(post.getImageUrl()).trim();
-            if (cleanUrl.endsWith(".")) {
-                cleanUrl = cleanUrl.substring(0, cleanUrl.length() - 1);
-            }
-            logger.info("ℹ️ Sending URL to Instagram: [{}]", cleanUrl);
-            containerBody.add("image_url", cleanUrl);
+            containerBody.add("image_url", getAccessibleUrlForInstagramPhoto(post.getImageUrl()));
             containerBody.add("media_type", "IMAGE");
             containerBody.add("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
-            containerBody.add("access_token", accessToken);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            HttpEntity<MultiValueMap<String, String>> containerRequest = new HttpEntity<>(containerBody, headers);
+
+            logger.info("ℹ️ Sending presigned URL to Instagram in request body");
 
             @SuppressWarnings("unchecked")
             Map<String, Object> containerResponse = executeMetaCallWithRetry(() -> 
-                restTemplate.postForObject(containerUrl, containerBody, Map.class));
+                restTemplate.postForObject(containerUrl, containerRequest, Map.class));
                 
             String creationId = (String) containerResponse.get("id");
             
@@ -387,9 +455,9 @@ public class PublisherService {
                 Thread.sleep(5000);
                 retries++;
                 
+                // Fetch status_code AND error details in one call
                 String statusUrl = "https://graph.facebook.com/v21.0/" + creationId + 
-                                  "?fields=status_code&access_token=" + accessToken;
-                @SuppressWarnings("unchecked")
+                                  "?fields=status_code,status&access_token=" + accessToken;
                 Map<String, Object> statusResponse = restTemplate.getForObject(statusUrl, Map.class);
                 String statusCode = statusResponse != null ? (String) statusResponse.get("status_code") : "UNKNOWN";
                 
@@ -398,7 +466,20 @@ public class PublisherService {
                 if ("FINISHED".equalsIgnoreCase(statusCode)) {
                     isReady = true;
                 } else if ("ERROR".equalsIgnoreCase(statusCode)) {
-                    throw new RuntimeException("Media processing failed.");
+                    // Extract detailed error info from Instagram
+                    String errorDetail = "";
+                    if (statusResponse != null && statusResponse.containsKey("status")) {
+                        Object statusObj = statusResponse.get("status");
+                        errorDetail = " | Instagram status detail: " + statusObj;
+                    }
+                    // Also try fetching video_status for more info
+                    try {
+                        String debugUrl = "https://graph.facebook.com/v21.0/" + creationId + 
+                                         "?fields=status_code,status,video_status&access_token=" + accessToken;
+                        Map<String, Object> debugResp = restTemplate.getForObject(debugUrl, Map.class);
+                        logger.error("❌ [Media ERROR] Full response: {}", debugResp);
+                    } catch (Exception ignored) {}
+                    throw new RuntimeException("Media processing failed." + errorDetail);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -558,15 +639,19 @@ public class PublisherService {
     private void publishToInstagramStory(Post post, String igId, String accessToken) {
         try {
             // Step 1: Create Stories Media Container
-            String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
-            Map<String, Object> body = new HashMap<>();
-            body.put("image_url", getAccessibleUrl(post.getImageUrl()).trim());
-            body.put("media_type", "STORIES");
-            body.put("access_token", accessToken);
+            // Send image_url in the body to avoid double-encoding
+            String containerUrl = UriComponentsBuilder
+                    .fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media")
+                    .queryParam("access_token", accessToken)
+                    .toUriString();
+
+            MultiValueMap<String, String> containerBody = new LinkedMultiValueMap<>();
+            containerBody.add("image_url", getAccessibleUrlForInstagramPhoto(post.getImageUrl()));
+            containerBody.add("media_type", "STORIES");
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(containerBody, headers);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, request, Map.class);
@@ -582,7 +667,9 @@ public class PublisherService {
             publishBody.put("creation_id", creationId);
             publishBody.put("access_token", accessToken);
 
-            HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, headers);
+            HttpHeaders publishHeaders = new HttpHeaders();
+            publishHeaders.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, publishHeaders);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishRequest, Map.class);
@@ -597,10 +684,20 @@ public class PublisherService {
     @SuppressWarnings("unchecked")
     private void publishToFacebookStory(Post post, String pageId, String accessToken) {
         try {
+            // Validate that we have media to publish
+            if (post.getImageUrl() == null && post.getVideoUrl() == null) {
+                throw new RuntimeException("Facebook Story requires either an image or video URL");
+            }
+
             // Step 1: Upload image or video as unpublished
             if (post.getImageUrl() == null && post.getVideoUrl() != null) {
-                 // Logic for FB Stories Video if needed...
-                 // Fallback to Image for now as standard implementation
+                // TODO: Implement video story publishing
+                throw new RuntimeException("Facebook video stories are not yet implemented. Please use an image.");
+            }
+
+            // Ensure imageUrl is not null before proceeding
+            if (post.getImageUrl() == null) {
+                throw new RuntimeException("Image URL is required for Facebook Story");
             }
 
             String uploadUrl = "https://graph.facebook.com/v21.0/" + pageId + "/photos";
@@ -632,50 +729,88 @@ public class PublisherService {
     }
 
     @SuppressWarnings("unchecked")
+    /**
+     * Publishes an Instagram Reel using direct video URL approach.
+     * 
+     * NOTE: Instagram's Reels API does not support resumable upload file handles as video_url.
+     * Using file handles causes error 2207072 ("Media upload has failed").
+     * This method uses the direct video_url approach which is proven to work reliably.
+     * 
+     * TESTING: Set app.instagram.reel.skip-transcode=true in application.yml or .env to test with original video
+     */
     private void publishReelToInstagram(Post post, String igId, String accessToken) {
         try {
-            // For Instagram Reels, we need a video_url. If it's missing, fail early.
             if (post.getVideoUrl() == null || post.getVideoUrl().isEmpty()) {
                 throw new RuntimeException("Video URL is required to publish an Instagram Reel.");
             }
 
-            // Step 1: Create Media Container for REELS
-            String containerUrl = "https://graph.facebook.com/v21.0/" + igId + "/media";
-            Map<String, Object> body = new HashMap<>();
-            body.put("video_url", post.getVideoUrl().trim());
-            body.put("media_type", "REELS");
-            body.put("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
-            body.put("access_token", accessToken);
+            // Step 1: Get clean public URL
+            String cleanUrl = s3Service.resolvePublicVideoUrl(post.getVideoUrl()).trim();
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            // Step 2: Check if transcoding should be skipped (for testing)
+            if (skipReelTranscode) {
+                logger.warn("⚠️ [Instagram Reel] TRANSCODING BYPASSED - Using original video for testing");
+                logger.info("🎥 [Instagram Reel] Original video URL: {}", cleanUrl);
+            } else if (videoTranscodeService.isFfmpegAvailable()) {
+                logger.info("🎬 [Instagram Reel] Transcoding to H.264/AAC...");
+                try {
+                    cleanUrl = videoTranscodeService.transcodeForInstagram(cleanUrl, post.getUser().getId());
+                } catch (Exception e) {
+                    logger.warn("⚠️ [Instagram Reel] Transcode failed, using original: {}", e.getMessage());
+                }
+            }
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, request, Map.class);
-            String creationId = (String) containerResponse.get("id");
+            // Step 3: Use direct video URL approach (proven to work reliably)
+            logger.info("🎥 [Instagram Reel] Publishing via direct video URL approach");
+            publishReelToInstagramViaUrl(post, igId, accessToken, cleanUrl);
 
-            if (creationId == null) throw new RuntimeException("Failed to create IG Reels container.");
-
-            // Step 2: Wait for video to process
-            waitForMediaStatus(creationId, accessToken);
-
-            // Step 3: Publish
-            String publishUrl = "https://graph.facebook.com/v21.0/" + igId + "/media_publish";
-            Map<String, Object> publishBody = new HashMap<>();
-            publishBody.put("creation_id", creationId);
-            publishBody.put("access_token", accessToken);
-
-            HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, headers);
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishRequest, Map.class);
-            post.setExternalPostId((String) publishResponse.get("id"));
-            logger.info("🎥 Instagram Reel Published successfully: {}", post.getExternalPostId());
         } catch (Exception e) {
             logger.error("Instagram Reel Error: {}", e.getMessage());
             throw new RuntimeException("Instagram Reel publishing failed", e);
         }
+    }
+
+    // Fallback: video_url approach (used if resumable upload init fails)
+    @SuppressWarnings("unchecked")
+    private void publishReelToInstagramViaUrl(Post post, String igId, String accessToken, String videoUrl) {
+        logger.info("🎥 [Instagram Reel] Using video_url approach: {}", videoUrl);
+        
+        // Send video_url in the body to avoid double-encoding
+        String containerUrl = UriComponentsBuilder
+                .fromHttpUrl("https://graph.facebook.com/v21.0/" + igId + "/media")
+                .queryParam("access_token", accessToken)
+                .toUriString();
+        
+        // Send all parameters in the body
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("video_url", videoUrl);
+        body.add("media_type", "REELS");
+        body.add("caption", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> containerResponse = restTemplate.postForObject(containerUrl, request, Map.class);
+        String creationId = (String) containerResponse.get("id");
+        if (creationId == null) throw new RuntimeException("Failed to create IG Reels container via URL.");
+
+        waitForMediaStatus(creationId, accessToken);
+
+        String publishUrl = "https://graph.facebook.com/v21.0/" + igId + "/media_publish";
+        Map<String, Object> publishBody = new HashMap<>();
+        publishBody.put("creation_id", creationId);
+        publishBody.put("access_token", accessToken);
+
+        HttpHeaders publishHeaders = new HttpHeaders();
+        publishHeaders.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> publishRequest = new HttpEntity<>(publishBody, publishHeaders);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> publishResponse = restTemplate.postForObject(publishUrl, publishRequest, Map.class);
+        post.setExternalPostId((String) publishResponse.get("id"));
+        logger.info("🎥 Instagram Reel Published (via URL): {}", post.getExternalPostId());
     }
 
     @SuppressWarnings("unchecked")
@@ -698,15 +833,17 @@ public class PublisherService {
             if (initResp == null || !initResp.containsKey("video_id")) {
                 throw new RuntimeException("Failed to initialize Facebook Reel upload.");
             }
-            String videoId = (String) initResp.get("video_id");
 
-            // For external URLs passing via API might require special handling or direct transfer, 
-            // Graph API supports file_url directly for videos in standard feed, but for reels, 
-            // usually you provide file_url with the finish phase or standard video upload.
-            // Using standard video endpoint as fallback for pages since video_reels has complex chunking.
+            // Facebook requires a clean, publicly accessible URL without pre-signed query params.
+            // Pre-signed S3 URLs (with X-Amz-Signature etc.) are rejected by Facebook's crawler (error 389).
+            // resolvePublicVideoUrl strips query params AND makes the S3 object public-read if needed.
             String fallbackUrl = "https://graph.facebook.com/v21.0/" + pageId + "/videos";
             MultiValueMap<String, Object> videoBody = new LinkedMultiValueMap<>();
-            videoBody.add("file_url", post.getVideoUrl());
+
+            String cleanUrl = s3Service.resolvePublicVideoUrl(post.getVideoUrl());
+            logger.info("\ud83c\udfac Sending Reel/Video URL to Facebook: [{}]", cleanUrl);
+
+            videoBody.add("file_url", cleanUrl);
             videoBody.add("description", post.getCaption() + (post.getHashtags() != null ? "\n\n" + post.getHashtags() : ""));
             videoBody.add("access_token", accessToken);
 
@@ -792,18 +929,53 @@ public class PublisherService {
      * Resolves an S3 permanent URL to a temporary Presigned URL.
      * This ensures Meta's crawlers can fetch the image even if the bucket is restricted.
      */
-    private String getAccessibleUrl(String imageUrl) {
-        if (imageUrl == null) return null;
+    private String getAccessibleUrl(String mediaUrl) {
+        if (mediaUrl == null) return null;
         
-        // Meta (Instagram) crawlers sometimes struggle with virtual-hosted S3 URLs 
-        // (bucket.s3.region.amazonaws.com). Converting to regional path-style 
-        // (s3.region.amazonaws.com/bucket) is often more robust.
-        if (imageUrl.contains(".s3.ap-south-1.amazonaws.com/")) {
-            return imageUrl.replace("gyanvaniai-prod-bucket.s3.ap-south-1.amazonaws.com/", 
-                                   "s3.ap-south-1.amazonaws.com/gyanvaniai-prod-bucket/");
+        // If it's an S3 URL from our bucket, generate a presigned URL
+        if (mediaUrl.contains(".amazonaws.com/")) {
+            try {
+                String key = s3Service.extractKeyFromUrl(mediaUrl);
+                // Presigned URL for 1 hour
+                String presignedUrl = s3Service.generatePresignedReadUrl(key);
+                
+                // Return the presigned URL as-is without any string manipulation
+                // String replacement on an already-encoded URL causes double-encoding issues
+                // which Instagram's API rejects (e.g., %252F instead of %2F)
+                return presignedUrl;
+            } catch (Exception e) {
+                logger.warn("⚠️ Failed to presign URL: {}. Falling back to original.", e.getMessage());
+            }
         }
         
-        return imageUrl;
+        return mediaUrl;
+    }
+
+    /**
+     * Resolves an S3 URL to a clean public URL for Instagram photos.
+     * 
+     * NOTE: Instagram's API rejects presigned S3 URLs with authentication parameters (error 2207052).
+     * This method makes the S3 object publicly readable and returns a clean permanent URL.
+     * 
+     * @param mediaUrl The S3 URL to resolve
+     * @return Clean public URL without query parameters
+     */
+    private String getAccessibleUrlForInstagramPhoto(String mediaUrl) {
+        if (mediaUrl == null) return null;
+        
+        // If it's an S3 URL, make it public and return clean URL (same as Instagram Reels)
+        if (mediaUrl.contains(".amazonaws.com/")) {
+            try {
+                logger.info("📸 [Instagram Photo] Making S3 object public and returning clean URL");
+                return s3Service.resolvePublicVideoUrl(mediaUrl);
+            } catch (Exception e) {
+                logger.warn("⚠️ Failed to make Instagram photo public: {}. Falling back to presigned URL.", e.getMessage());
+                // Fallback to presigned URL if making public fails
+                return getAccessibleUrl(mediaUrl);
+            }
+        }
+        
+        return mediaUrl;
     }
 
     private <T> T executeMetaCallWithRetry(java.util.function.Supplier<T> call) {

@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+
 @RestController
 @RequestMapping("/api/v1/payments/webhook")
 @RequiredArgsConstructor
@@ -14,16 +16,17 @@ public class WebhookController {
 
     private final PaymentService paymentService;
 
-    @PostMapping
+    @PostMapping(consumes = "application/json")
     public ResponseEntity<String> handleWebhook(
-            @RequestBody String payload,
+            @RequestBody byte[] rawPayload,
             @RequestHeader("X-Razorpay-Signature") String signature) {
-        
-        log.info("Razorpay Webhook Received with payload length: {}", payload.length());
-        
-        // This is a simplified call; in production, you should verify the signature in PaymentService
+
+        // Convert raw bytes to String preserving exact encoding for HMAC verification
+        String payload = new String(rawPayload, StandardCharsets.UTF_8);
+        log.info("Razorpay Webhook Received. Payload length: {}", payload.length());
+
         paymentService.processWebhook(payload, signature);
-        
+
         // Always return 200 OK to Razorpay to prevent retries
         return ResponseEntity.ok("Webhook processed");
     }

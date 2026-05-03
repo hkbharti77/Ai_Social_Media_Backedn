@@ -5,9 +5,15 @@ import com.aiplatform.model.BusinessProfile;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.BusinessProfileRepository;
 import com.aiplatform.service.AiContentService;
+import com.aiplatform.service.SubscriptionService;
+import com.aiplatform.service.VideoCreditService;
+import com.aiplatform.service.VideoLimitService;
+import com.aiplatform.service.VeoVideoService;
 import com.aiplatform.util.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +25,51 @@ import java.util.List;
 public class AiController {
 
     private final AiContentService aiContentService;
+    private final VeoVideoService veoVideoService;
+    private final SubscriptionService subscriptionService;
+    private final VideoLimitService videoLimitService;
+    private final VideoCreditService videoCreditService;
     private final BusinessProfileRepository businessProfileRepository;
+
+    @GetMapping("/video-models")
+    public ResponseEntity<?> getAvailableVideoModels() {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        
+        String userTier = user.getSubscriptionTier() != null
+                ? user.getSubscriptionTier().name().replace("_", " ") : "Free";
+        // Normalise enum name (SUPER_PRO → "Super Pro")
+        userTier = toDisplayTierName(user.getSubscriptionTier());
+
+        int remaining = videoLimitService.getRemainingFreeVideos(user.getId());
+        int monthlyLimit = VideoLimitService.getMonthlyVideoLimit(userTier.toLowerCase());
+
+        java.util.List<java.util.Map<String, Object>> models = new java.util.ArrayList<>();
+        for (com.aiplatform.model.VeoModelSelection model : com.aiplatform.model.VeoModelSelection.values()) {
+            java.util.Map<String, Object> modelInfo = new java.util.HashMap<>();
+            modelInfo.put("modelId", model.getModelId());
+            modelInfo.put("qualityTier", model.getQualityTier());
+            modelInfo.put("description", model.getDescription());
+            modelInfo.put("requiredLevel", model.getRequiredLevel());
+            modelInfo.put("requiredTier", getRequiredTierName(model.getRequiredLevel()));
+            modelInfo.put("accessible", model.isAccessibleByTier(userTier));
+            int extraPrice = VideoLimitService.getExtraVideoPrice(userTier.toLowerCase(), model);
+            modelInfo.put("extraVideoPrice", extraPrice > 0 ? extraPrice : null);
+            modelInfo.put("extraVideoPriceInr", extraPrice > 0 ? "₹" + extraPrice : "N/A");
+            models.add(modelInfo);
+        }
+
+        boolean canGenerateVideo = !"free".equalsIgnoreCase(userTier) && !"creator".equalsIgnoreCase(userTier);
+
+        return ResponseEntity.ok(java.util.Map.of(
+            "models", models,
+            "userTier", userTier,
+            "canGenerateVideo", canGenerateVideo,
+            "monthlyVideoLimit", monthlyLimit,
+            "videosRemaining", remaining,
+            "videosUsed", monthlyLimit - remaining
+        ));
+    }
 
     @PostMapping("/generate")
     public ResponseEntity<GenerationResponse> generatePosts(@Valid @RequestBody PostGenerationRequest request) {
@@ -135,12 +185,96 @@ public class AiController {
     }
 
     @PostMapping("/reel")
-    public ResponseEntity<ReelResponse> generateReel(@Valid @RequestBody PostGenerationRequest request) {
+    public ResponseEntity<?> generateReel(@Valid @RequestBody PostGenerationRequest request) {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         BusinessProfile bp = getFirstProfile(user);
+
+        if (Boolean.TRUE.equals(request.getGenerateActualVideo())) {
+            String userTier = toDisplayTierName(user.getSubscriptionTier());
+
+            // Determine which Veo model to use
+            String selectedModelId = request.getVideoModelId() != null ? request.getVideoModelId() : "veo-lite";
+            com.aiplatform.model.VeoModelSelection veoModel = com.aiplatform.model.VeoModelSelection.fromModelId(selectedModelId);
+
+            // Validate tier access (throws if Free/Creator or wrong model for tier)
+            try {
+                videoLimitService.validateAndCheckVideoAccess(user.getId(), userTier, veoModel);
+            } catch (com.aiplatform.exception.InsufficientCreditsException e) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(java.util.Map.of(
+                        "error", "Video generation not available on your plan",
+                        "message", e.getMessage(),
+                        "currentTier", userTier
+                    ));
+            }
+
+            // Check wallet — user must have a credit for this model
+            if (!videoCreditService.hasCreditForModel(user, veoModel)) {
+                int cheapestPack = switch (veoModel) {
+                    case VEO_LITE     -> 55;
+                    case VEO_FAST     -> 140;
+                    case VEO_STANDARD -> 470;
+                };
+                return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                    .body(java.util.Map.of(
+                        "error",             "No video credits",
+                        "message",           "You have no " + veoModel.getQualityTier() + " video credits. Buy a pack to continue.",
+                        "modelId",           veoModel.getModelId(),
+                        "cheapestPackPrice", "₹" + cheapestPack,
+                        "buyCreditsUrl",     "/api/v1/video-credits/packs/" + veoModel.getModelId(),
+                        "wallet",            videoCreditService.getWalletBalance(user)
+                    ));
+            }
+
+            // Deduct 1 credit and generate
+            try {
+                videoCreditService.deductVideoCredit(user.getId(), veoModel);
+                VideoGenerationResponse videoResponse = veoVideoService.generateVideo(bp, request, user.getId());
+
+                java.util.Map<String, Object> wallet = videoCreditService.getWalletBalance(user);
+
+                return ResponseEntity.ok(java.util.Map.of(
+                    "video",          videoResponse,
+                    "creditDeducted", "1 " + veoModel.getQualityTier() + " video credit",
+                    "wallet",         wallet
+                ));
+            } catch (com.aiplatform.exception.VeoRateLimitException e) {
+                videoCreditService.refundVideoCredit(user.getId(), veoModel);
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(e.getMessage());
+            } catch (com.aiplatform.exception.VeoTimeoutException e) {
+                videoCreditService.refundVideoCredit(user.getId(), veoModel);
+                return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(e.getMessage());
+            } catch (Exception e) {
+                videoCreditService.refundVideoCredit(user.getId(), veoModel);
+                org.slf4j.LoggerFactory.getLogger(AiController.class).error("Reel generation error", e);
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body("Video generation failed: " + e.getMessage());
+            }
+        }
+
+        // Script-only generation (available for all tiers)
         return ResponseEntity.ok(aiContentService.generateReel(bp, request.getCommand(), user.getId(), request.getModelId(), request));
+    }
+
+    private String toDisplayTierName(com.aiplatform.model.SubscriptionTier tier) {
+        if (tier == null) return "Free";
+        return switch (tier) {
+            case FREE      -> "Free";
+            case CREATOR   -> "Creator";
+            case STANDARD  -> "Standard";
+            case PRO       -> "Pro";
+            case SUPER_PRO -> "Super Pro";
+        };
+    }
+    
+    private String getRequiredTierName(int level) {
+        return switch (level) {
+            case 1 -> "Standard";
+            case 2 -> "Pro";
+            case 3 -> "Super Pro";
+            default -> "Free";
+        };
     }
     
     @PostMapping("/campaign")

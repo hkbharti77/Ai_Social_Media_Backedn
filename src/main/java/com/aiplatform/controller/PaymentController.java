@@ -42,13 +42,6 @@ public class PaymentController {
         
         // Use the new pro-rated service logic
         PaymentOrder paymentOrder = paymentService.createOrder(user, targetTier);
-        
-        // Handle cases where pro-rating results in 1 INR (essentially free or already covered)
-        if (paymentOrder.getAmount() <= 100) { // 100 paise = 1 INR
-            // If the adjustment makes it nearly free, we could potentially just upgrade them, 
-            // but for tracking, we still create a 1 INR order or handle as free.
-            // Let's stick to the order flow if amount > 0.
-        }
 
         return ResponseEntity.ok(Map.of(
             "order_id", paymentOrder.getRazorpayOrderId(),

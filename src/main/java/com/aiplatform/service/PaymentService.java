@@ -5,11 +5,9 @@ import com.aiplatform.model.SubscriptionTier;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.PaymentOrderRepository;
 import com.aiplatform.util.EmailTemplateUtils;
-import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import com.razorpay.Utils;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
@@ -28,9 +26,7 @@ public class PaymentService {
     private final SubscriptionService subscriptionService;
     private final EmailService emailService;
     private final EmailTemplateUtils emailTemplateUtils;
-
-    @Value("${razorpay.key.id}")
-    private String razorpayKeyId;
+    private final RazorpayClient razorpayClient; // injected shared bean
 
     @Value("${razorpay.key.secret}")
     private String razorpayKeySecret;
@@ -38,24 +34,16 @@ public class PaymentService {
     @Value("${razorpay.webhook.secret}")
     private String webhookSecret;
 
-    private RazorpayClient razorpayClient;
-
-    @PostConstruct
-    public void init() throws RazorpayException {
-        this.razorpayClient = new RazorpayClient(razorpayKeyId, razorpayKeySecret);
-    }
-
     @Transactional
     public PaymentOrder createOrder(User user, SubscriptionTier targetTier) throws RazorpayException {
-        // Calculate pro-rated amount (Hoststar style)
         long finalAmountInInr = subscriptionService.calculateUpgradePrice(user, targetTier);
         
         JSONObject orderRequest = new JSONObject();
-        orderRequest.put("amount", finalAmountInInr * 100); // amount in the smallest currency unit (paise)
+        orderRequest.put("amount", finalAmountInInr * 100);
         orderRequest.put("currency", "INR");
         orderRequest.put("receipt", "receipt_user_" + user.getId() + "_" + System.currentTimeMillis());
 
-        Order razorpayOrder = razorpayClient.orders.create(orderRequest);
+        com.razorpay.Order razorpayOrder = razorpayClient.orders.create(orderRequest);
 
         PaymentOrder paymentOrder = PaymentOrder.builder()
                 .razorpayOrderId(razorpayOrder.get("id"))
@@ -130,6 +118,7 @@ public class PaymentService {
                 
                 if (paymentOrder != null && !"COMPLETED".equals(paymentOrder.getStatus())) {
                     paymentOrder.setRazorpayPaymentId(paymentId);
+                    paymentOrder.setRazorpaySignature(signature); // store webhook signature
                     paymentOrder.setStatus("COMPLETED");
                     paymentOrder.setCompletedAt(LocalDateTime.now());
                     paymentOrderRepository.save(paymentOrder);

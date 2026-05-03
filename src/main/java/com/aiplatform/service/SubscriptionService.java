@@ -166,8 +166,33 @@ public class SubscriptionService {
         } else {
             user.setSubscriptionExpiresAt(null);
         }
-        
+
+        // ── Add included video credits to wallet ─────────────────────────────
+        // Credits are ADDED (not replaced) so existing purchased credits are preserved
+        int liteCr     = newTier.getIncludedLiteCredits();
+        int fastCr     = newTier.getIncludedFastCredits();
+        int standardCr = newTier.getIncludedStandardCredits();
+
+        if (liteCr > 0) {
+            user.setVideoCreditLite((user.getVideoCreditLite() != null ? user.getVideoCreditLite() : 0) + liteCr);
+        }
+        if (fastCr > 0) {
+            user.setVideoCreditFast((user.getVideoCreditFast() != null ? user.getVideoCreditFast() : 0) + fastCr);
+        }
+        if (standardCr > 0) {
+            user.setVideoCreditStandard((user.getVideoCreditStandard() != null ? user.getVideoCreditStandard() : 0) + standardCr);
+        }
+
+        // ── Reset monthly video counter (old limit-based system) ─────────────
+        user.setMonthlyVideoLimit(0); // No longer used — wallet-based now
+        user.setVideosUsedThisMonth(0);
+        user.setVideoResetDate(LocalDateTime.now());
+
         userRepository.save(user);
+
+        org.slf4j.LoggerFactory.getLogger(SubscriptionService.class)
+            .info("User {} upgraded to {}. Video credits added: {}L + {}F + {}S",
+                userId, newTier.name(), liteCr, fastCr, standardCr);
     }
 
     @Transactional(readOnly = true)

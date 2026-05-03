@@ -20,10 +20,13 @@ public class ContentGenerationDtos {
         @Max(value = 20, message = "Count cannot exceed 20")
         private int count = 1;
 
-        private String modelId;
+        private String modelId;              // For image generation (e.g., "gemini-2.5-flash-image")
+        private String videoModelId;         // For video generation (e.g., "veo-lite", "veo-fast", "veo-standard")
         private String aspectRatio;
         private String voiceMode;
-        private String contentType; // MARKETING or EDUCATIONAL
+        private String contentType;          // MARKETING or EDUCATIONAL
+        private Boolean generateActualVideo; // true = generate video, false/null = script only
+        private Boolean confirmExtraCharge;  // true = user confirmed extra pay-per-video charge
     }
 
     @Data
@@ -187,6 +190,22 @@ public class ContentGenerationDtos {
         private String audioSuggestion;
         private String imageSuggestion; // Thumbnail/Storyboard
         private String imageUrl;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @lombok.Builder
+    public static class VideoGenerationResponse {
+        private String videoUrl;
+        private String caption;
+        private List<String> hashtags;
+        private String videoScript;
+        private String imageUrl;
+        private String audioSuggestion;
+        private String generationMode;  // VEO_ACTUAL or SCRIPT_ONLY
+        private String modelUsed;       // Which model was used (e.g., "veo-lite", "veo-fast")
+        private Double creditsUsed;     // How many credits were deducted
     }
 
     @Data

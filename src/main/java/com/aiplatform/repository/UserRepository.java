@@ -22,4 +22,24 @@ public interface UserRepository extends JpaRepository<User, Long> {
            "(:query IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(u.fullName) LIKE LOWER(CONCAT('%', :query, '%')))")
     org.springframework.data.domain.Page<User> searchUsers(String query, org.springframework.data.domain.Pageable pageable);
+
+    // Admin Management - Fraud management
+    org.springframework.data.domain.Page<User> findByIsFraudFlaggedTrue(org.springframework.data.domain.Pageable pageable);
+    List<User> findBySubscriptionTier(SubscriptionTier tier);
+    Long countByIsActiveTrue();
+    Long countByIsFraudFlaggedTrue();
+
+    // Admin Management - Suspicious registration detection
+    @Query("SELECT u.registrationIp FROM User u " +
+           "WHERE u.registrationIp IS NOT NULL AND u.registrationIp <> '' " +
+           "GROUP BY u.registrationIp HAVING COUNT(u) > 1")
+    List<String> findDuplicateRegistrationIps();
+
+    @Query("SELECT u.deviceFingerprint FROM User u " +
+           "WHERE u.deviceFingerprint IS NOT NULL AND u.deviceFingerprint <> '' " +
+           "GROUP BY u.deviceFingerprint HAVING COUNT(u) > 1")
+    List<String> findDuplicateDeviceFingerprints();
+
+    List<User> findByRegistrationIp(String registrationIp);
+    List<User> findByDeviceFingerprint(String deviceFingerprint);
 }

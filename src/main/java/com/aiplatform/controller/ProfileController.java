@@ -68,6 +68,10 @@ public class ProfileController {
         subMap.put("referralCode", user.getReferralCode());
         subMap.put("bonusCredits", user.getBonusCredits() != null ? user.getBonusCredits() : 0.0);
         subMap.put("dailyAdsViewed", user.getDailyAdsViewed() != null ? user.getDailyAdsViewed() : 0);
+        // Video credit wallet
+        subMap.put("videoCreditLite",     user.getVideoCreditLite()     != null ? user.getVideoCreditLite()     : 0);
+        subMap.put("videoCreditFast",     user.getVideoCreditFast()     != null ? user.getVideoCreditFast()     : 0);
+        subMap.put("videoCreditStandard", user.getVideoCreditStandard() != null ? user.getVideoCreditStandard() : 0);
         
         response.put("subscription", subMap);
         

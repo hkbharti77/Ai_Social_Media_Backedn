@@ -32,6 +32,21 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.PAYMENT_REQUIRED, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(VeoRateLimitException.class)
+    public ResponseEntity<StandardErrorResponse> handleVeoRateLimitException(VeoRateLimitException ex, WebRequest request) {
+        return buildErrorResponse(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(VeoTimeoutException.class)
+    public ResponseEntity<StandardErrorResponse> handleVeoTimeoutException(VeoTimeoutException ex, WebRequest request) {
+        return buildErrorResponse(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(VeoGenerationException.class)
+    public ResponseEntity<StandardErrorResponse> handleVeoGenerationException(VeoGenerationException ex, WebRequest request) {
+        return buildErrorResponse(HttpStatus.BAD_GATEWAY, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<StandardErrorResponse> globalExceptionHandler(Exception ex, WebRequest request) {
         String message = ex.getMessage() != null ? ex.getMessage() : "An unexpected service error occurred";

@@ -53,4 +53,23 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     /** Check if a scheduled post already exists in the given time window */
     boolean existsByUserAndStatusAndScheduledAtBetween(
             User user, PostStatus status, LocalDateTime start, LocalDateTime end);
+
+    // Admin Management - Admin paginated listing with combined filters
+    @Query("SELECT p FROM Post p WHERE " +
+           "(:status IS NULL OR p.status = :status) AND " +
+           "(:userId IS NULL OR p.user.id = :userId) " +
+           "ORDER BY p.createdAt DESC")
+    org.springframework.data.domain.Page<Post> findAllWithFilters(
+            @Param("status") PostStatus status,
+            @Param("userId") Long userId,
+            org.springframework.data.domain.Pageable pageable);
+
+    // Admin Management - Stats queries
+    Long countByStatus(PostStatus status);
+
+    @Query("SELECT COUNT(p) FROM Post p WHERE p.createdAt >= :startOfMonth")
+    Long countCreatedFrom(@Param("startOfMonth") LocalDateTime startOfMonth);
+
+    @Query("SELECT COUNT(p) FROM Post p WHERE p.status = 'PUBLISHED' AND p.publishedAt >= :startOfDay")
+    Long countPublishedFrom(@Param("startOfDay") LocalDateTime startOfDay);
 }

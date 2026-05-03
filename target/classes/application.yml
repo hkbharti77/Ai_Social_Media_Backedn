@@ -57,6 +57,9 @@ spring:
     imagen:
       image-model: gemini-3.1-flash-image-preview
       api-url: https://generativelanguage.googleapis.com/v1beta
+    veo:
+      model: veo-3.1-fast-generate-preview  # Changed from Standard to Fast (74% cost reduction)
+      credit-cost: 20.0
 
 management:
   endpoints:
@@ -80,6 +83,11 @@ app:
   use-s3: ${USE_S3:true}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   backend-url: ${BACKEND_URL:http://localhost:8080}
+  ffmpeg:
+    path: ${FFMPEG_PATH:D:/ffmpeg/ffmpeg-8.1-essentials_build/bin/ffmpeg.exe}
+  instagram:
+    reel:
+      skip-transcode: ${INSTAGRAM_REEL_SKIP_TRANSCODE:false}
   scheduling:
     # Trigger times (Cron format: "sec min hour day month weekday") — zone: Asia/Kolkata (IST)
     morning-draft-cron: "0 0 6 * * ?"       # 6:00 AM IST — Generate morning drafts

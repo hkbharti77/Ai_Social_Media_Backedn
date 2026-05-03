@@ -139,12 +139,45 @@ public class PdfService {
             document.open();
 
             // Font styles
-            Font brandFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 28, Color.WHITE);
-            Font headerFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 22, PRIMARY_PURPLE);
-            Font subHeaderFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, TEXT_MUTED);
-            Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 11, TEXT_DARK);
-            Font boldFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, TEXT_DARK);
-            Font tableHeaderFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, Color.WHITE);
+            Font brandFont      = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 28, Color.WHITE);
+            Font headerFont     = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 22, PRIMARY_PURPLE);
+            Font subHeaderFont  = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, TEXT_MUTED);
+            Font normalFont     = FontFactory.getFont(FontFactory.HELVETICA, 11, TEXT_DARK);
+            Font boldFont       = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, TEXT_DARK);
+            Font tableHeaderFont= FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, Color.WHITE);
+
+            // Safe values — guard against nulls
+            String userName   = order.getUser() != null && order.getUser().getFullName() != null
+                                ? order.getUser().getFullName() : "VaniAI User";
+            String userEmail  = order.getUser() != null && order.getUser().getEmail() != null
+                                ? order.getUser().getEmail() : "";
+            String orderId    = order.getRazorpayOrderId() != null ? order.getRazorpayOrderId() : "N/A";
+            String dateStr    = order.getCompletedAt() != null
+                                ? order.getCompletedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+                                : order.getCreatedAt() != null
+                                    ? order.getCreatedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+                                    : "N/A";
+            long amountInr    = order.getAmount() != null ? order.getAmount() / 100 : 0;
+
+            // Friendly plan name
+            String planName;
+            if (order.getTargetTier() != null) {
+                // Convert SUPER_PRO → Super Pro
+                String raw = order.getTargetTier().name().replace("_", " ").toLowerCase();
+                StringBuilder sb = new StringBuilder();
+                for (String word : raw.split(" ")) {
+                    if (!word.isEmpty()) {
+                        sb.append(Character.toUpperCase(word.charAt(0)))
+                          .append(word.substring(1))
+                          .append(" ");
+                    }
+                }
+                planName = sb.toString().trim();
+            } else if (order.getVideoModelId() != null) {
+                planName = "Video Credits (" + order.getVideoModelId() + " x " + order.getVideoCreditsPurchased() + ")";
+            } else {
+                planName = "Subscription";
+            }
 
             // 1. Header Banner
             PdfPTable headerTable = new PdfPTable(1);
@@ -156,28 +189,25 @@ public class PdfService {
             bannerCell.setHorizontalAlignment(Element.ALIGN_CENTER);
             headerTable.addCell(bannerCell);
             document.add(headerTable);
-
             document.add(new Paragraph("\n"));
 
             // 2. Receipt Info Section
             PdfPTable infoTable = new PdfPTable(2);
             infoTable.setWidthPercentage(100);
-            
-            // Left Side: Invoiced To
+
             PdfPCell leftCell = new PdfPCell();
             leftCell.setBorder(Rectangle.NO_BORDER);
             leftCell.addElement(new Phrase("INVOICED TO:", subHeaderFont));
-            leftCell.addElement(new Phrase(order.getUser().getFullName(), boldFont));
-            leftCell.addElement(new Phrase(order.getUser().getEmail(), normalFont));
+            leftCell.addElement(new Phrase(userName, boldFont));
+            leftCell.addElement(new Phrase(userEmail, normalFont));
             infoTable.addCell(leftCell);
 
-            // Right Side: Receipt Details
             PdfPCell rightCell = new PdfPCell();
             rightCell.setBorder(Rectangle.NO_BORDER);
             rightCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
             rightCell.addElement(new Phrase("RECEIPT DETAILS:", subHeaderFont));
-            rightCell.addElement(new Phrase("Order ID: " + order.getRazorpayOrderId(), normalFont));
-            rightCell.addElement(new Phrase("Date: " + order.getCompletedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy")), normalFont));
+            rightCell.addElement(new Phrase("Order ID: " + orderId, normalFont));
+            rightCell.addElement(new Phrase("Date: " + dateStr, normalFont));
             infoTable.addCell(rightCell);
 
             document.add(infoTable);
@@ -188,16 +218,14 @@ public class PdfService {
             table.setWidthPercentage(100);
             table.setWidths(new float[]{3f, 1f});
 
-            // Table Header
-            addTableHeader(table, "Subscription Details", tableHeaderFont);
+            addTableHeader(table, "Description", tableHeaderFont);
             addTableHeader(table, "Amount", tableHeaderFont);
 
-            // Table Rows
-            addStyledCell(table, order.getTargetTier() + " Plan Upgrade - 1 Month Subscription", normalFont, false);
-            addStyledCell(table, "\u20B9" + (order.getAmount() / 100.0), normalFont, true);
+            addStyledCell(table, planName + " - 1 Month", normalFont, false);
+            addStyledCell(table, "\u20B9" + amountInr, normalFont, true);
 
-            addStyledCell(table, "Platform Access & AI Engine Tokenization", normalFont, false);
-            addStyledCell(table, "\u20B9 0.00", normalFont, true);
+            addStyledCell(table, "Platform Access & AI Engine", normalFont, false);
+            addStyledCell(table, "Included", normalFont, true);
 
             document.add(table);
 
@@ -207,19 +235,18 @@ public class PdfService {
             totalTable.setWidths(new float[]{3f, 1f});
 
             addTotalCell(totalTable, "Subtotal", normalFont, false);
-            addTotalCell(totalTable, "\u20B9" + (order.getAmount() / 100.0), normalFont, true);
+            addTotalCell(totalTable, "\u20B9" + amountInr, normalFont, true);
 
-            addTotalCell(totalTable, "Tax (Included)", normalFont, false);
-            addTotalCell(totalTable, "\u20B9 0.00", normalFont, true);
+            addTotalCell(totalTable, "GST (18% incl.)", normalFont, false);
+            addTotalCell(totalTable, "Included", normalFont, true);
 
-            // Final Total Highlight
             PdfPCell totalLabel = new PdfPCell(new Phrase("TOTAL PAID", boldFont));
             totalLabel.setBorder(Rectangle.TOP);
             totalLabel.setBorderWidth(1f);
             totalLabel.setPadding(10);
             totalTable.addCell(totalLabel);
 
-            PdfPCell totalValue = new PdfPCell(new Phrase("\u20B9" + (order.getAmount() / 100.0), headerFont));
+            PdfPCell totalValue = new PdfPCell(new Phrase("\u20B9" + amountInr, headerFont));
             totalValue.setBorder(Rectangle.TOP);
             totalValue.setBorderWidth(1f);
             totalValue.setPadding(10);
@@ -228,13 +255,14 @@ public class PdfService {
 
             document.add(totalTable);
 
-            // 5. Footer / Support
+            // 5. Footer
             document.add(new Paragraph("\n\n\n\n"));
             LineSeparator ls = new LineSeparator();
             ls.setLineColor(new Color(226, 232, 240));
             document.add(new Chunk(ls));
-            
-            Paragraph footer = new Paragraph("This is an electronically generated receipt for your VaniAI subscription. No physical signature is required.", subHeaderFont);
+
+            Paragraph footer = new Paragraph(
+                "This is an electronically generated receipt. No physical signature required.", subHeaderFont);
             footer.setAlignment(Element.ALIGN_CENTER);
             footer.setSpacingBefore(15f);
             document.add(footer);

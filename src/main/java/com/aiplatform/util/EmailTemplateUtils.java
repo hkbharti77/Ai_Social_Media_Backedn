@@ -191,4 +191,21 @@ public class EmailTemplateUtils {
 
         return wrapInBaseTemplate("Account Verification", content);
     }
+
+    /**
+     * Wraps broadcast email content in the professional email template
+     * @param subject The email subject (used as tagline)
+     * @param htmlContent The HTML content to wrap
+     * @return Fully formatted HTML email with template
+     */
+    public String getBroadcastEmailHtml(String subject, String htmlContent) {
+        // Wrap the user's HTML content in a styled container
+        String wrappedContent = 
+            "<div style=\"color:#e2e8f0;font-size:15px;line-height:1.7;\">" +
+            htmlContent +
+            "</div>" +
+            "<p style=\"color:#94a3b8;font-size:14px;line-height:1.7;margin:24px 0 0 0;\">Regards,<br>GyanVaniAi Team</p>";
+        
+        return wrapInBaseTemplate(subject, wrappedContent);
+    }
 }

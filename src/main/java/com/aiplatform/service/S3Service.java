@@ -147,6 +147,45 @@ public class S3Service {
     }
 
     /**
+     * Makes an existing S3 object publicly readable by setting its ACL to PUBLIC_READ.
+     * Use this for video objects that need to be accessible by Facebook/Instagram crawlers.
+     */
+    public void makeObjectPublic(String key) {
+        try {
+            PutObjectAclRequest aclRequest = PutObjectAclRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .acl(ObjectCannedACL.PUBLIC_READ)
+                    .build();
+            s3Client.putObjectAcl(aclRequest);
+            logger.info("✅ [S3] Made object public: {}", key);
+        } catch (Exception e) {
+            logger.warn("⚠️ [S3] Failed to make object public: {}. Error: {}", key, e.getMessage());
+        }
+    }
+
+    /**
+     * Resolves a video URL to a publicly accessible URL.
+     * If the URL is a pre-signed URL, strips query params and makes the object public-read.
+     * Returns the clean permanent URL.
+     */
+    public String resolvePublicVideoUrl(String videoUrl) {
+        if (videoUrl == null) return null;
+        // Get clean URL without query params
+        String cleanUrl = getPermanentUrlFromPresigned(videoUrl);
+        // If it was a pre-signed URL (had query params), make the object public now
+        if (videoUrl.contains("?") && videoUrl.contains(".amazonaws.com/")) {
+            try {
+                String key = extractKeyFromUrl(cleanUrl);
+                makeObjectPublic(key);
+            } catch (Exception e) {
+                logger.warn("⚠️ [S3] Could not make video public: {}", e.getMessage());
+            }
+        }
+        return cleanUrl;
+    }
+
+    /**
      * Extracts the S3 Key from a URL (permanent or pre-signed).
      */
     public String extractKeyFromUrl(String url) {

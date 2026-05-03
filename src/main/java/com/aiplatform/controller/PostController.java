@@ -339,4 +339,78 @@ public class PostController {
             ));
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // ADMIN / MAINTENANCE ENDPOINTS
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * POST /api/v1/posts/fix-invalid-stories
+     * Finds and fixes story posts that are missing images.
+     * Options: 'delete', 'draft', 'fail'
+     */
+    @PostMapping("/fix-invalid-stories")
+    public ResponseEntity<Map<String, Object>> fixInvalidStories(
+            @RequestParam(defaultValue = "fail") String action) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+
+        // Find all story posts without images for this user
+        List<Post> invalidStories = postRepository.findByUser(user).stream()
+                .filter(p -> Boolean.TRUE.equals(p.getIsStory()))
+                .filter(p -> p.getImageUrl() == null || p.getImageUrl().trim().isEmpty())
+                .toList();
+
+        if (invalidStories.isEmpty()) {
+            return ResponseEntity.ok(Map.of(
+                "message", "No invalid story posts found",
+                "count", 0
+            ));
+        }
+
+        int count = invalidStories.size();
+        
+        switch (action.toLowerCase()) {
+            case "delete":
+                // Delete the posts
+                postRepository.deleteAll(invalidStories);
+                logger.info("🗑️ [PostController] Deleted {} invalid story posts for user {}", count, user.getEmail());
+                return ResponseEntity.ok(Map.of(
+                    "message", "Invalid story posts deleted",
+                    "count", count,
+                    "action", "deleted"
+                ));
+                
+            case "draft":
+                // Convert to draft
+                invalidStories.forEach(p -> {
+                    p.setStatus(PostStatus.DRAFT);
+                    p.setScheduledAt(null);
+                    p.setFailureReason("Story requires an image. Please add an image and reschedule.");
+                });
+                postRepository.saveAll(invalidStories);
+                logger.info("📝 [PostController] Converted {} invalid story posts to DRAFT for user {}", count, user.getEmail());
+                return ResponseEntity.ok(Map.of(
+                    "message", "Invalid story posts converted to drafts",
+                    "count", count,
+                    "action", "converted_to_draft"
+                ));
+                
+            case "fail":
+            default:
+                // Mark as failed
+                invalidStories.forEach(p -> {
+                    p.setStatus(PostStatus.FAILED);
+                    p.setFailureReason("Story posts require an image. This post was created without an image and cannot be published.");
+                });
+                postRepository.saveAll(invalidStories);
+                logger.info("❌ [PostController] Marked {} invalid story posts as FAILED for user {}", count, user.getEmail());
+                return ResponseEntity.ok(Map.of(
+                    "message", "Invalid story posts marked as failed",
+                    "count", count,
+                    "action", "marked_failed",
+                    "postIds", invalidStories.stream().map(Post::getId).toList()
+                ));
+        }
+    }
 }

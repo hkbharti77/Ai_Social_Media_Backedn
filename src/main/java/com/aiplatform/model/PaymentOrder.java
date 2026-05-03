@@ -31,7 +31,20 @@ public class PaymentOrder {
 
     private Long amount; // in paise
     private String currency;
-    
+
+    /** ORDER_TYPE: SUBSCRIPTION | VIDEO_CREDIT_PACK | VIDEO_CREDIT_MANUAL */
+    @Builder.Default
+    @Column(name = "order_type")
+    private String orderType = "SUBSCRIPTION";
+
+    /** For video credit orders: which model (veo-lite / veo-fast / veo-standard) */
+    @Column(name = "video_model_id")
+    private String videoModelId;
+
+    /** For video credit orders: how many video credits purchased */
+    @Column(name = "video_credits_purchased")
+    private Integer videoCreditsPurchased;
+
     @Builder.Default
     private String status = "CREATED"; // CREATED, COMPLETED, FAILED
 

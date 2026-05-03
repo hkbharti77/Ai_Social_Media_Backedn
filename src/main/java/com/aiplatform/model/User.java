@@ -135,4 +135,35 @@ public class User {
     @Builder.Default
     @Column(name = "total_usage_minutes")
     private Long totalUsageMinutes = 0L;
+
+    // ── Video Limit System ──────────────────────────────────────────────────────
+    /** Monthly video generation limit from the subscription plan (0 = no video access) */
+    @Builder.Default
+    @Column(name = "monthly_video_limit")
+    private Integer monthlyVideoLimit = 0;
+
+    /** Number of videos generated in the current billing month */
+    @Builder.Default
+    @Column(name = "videos_used_this_month")
+    private Integer videosUsedThisMonth = 0;
+
+    /** When the monthly video counter was last reset */
+    @Column(name = "video_reset_date")
+    private LocalDateTime videoResetDate;
+
+    // ── Video Credit Wallet ─────────────────────────────────────────────────────
+    /** Purchased Veo Lite video credits (never expire) */
+    @Builder.Default
+    @Column(name = "video_credits_lite")
+    private Integer videoCreditLite = 0;
+
+    /** Purchased Veo Fast video credits (never expire) */
+    @Builder.Default
+    @Column(name = "video_credits_fast")
+    private Integer videoCreditFast = 0;
+
+    /** Purchased Veo Standard video credits (never expire) */
+    @Builder.Default
+    @Column(name = "video_credits_standard")
+    private Integer videoCreditStandard = 0;
 }

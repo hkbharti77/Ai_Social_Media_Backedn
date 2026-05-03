@@ -7,9 +7,12 @@ import com.aiplatform.repository.AiUsageLogRepository;
 import com.aiplatform.repository.CreditUsageRepository;
 import com.aiplatform.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -26,11 +29,14 @@ public class UsageController {
     private final com.aiplatform.service.OwnerSecurityService ownerSecurityService;
 
     @GetMapping("/history")
-    public ResponseEntity<List<CreditUsage>> getUsageHistory() {
+    public ResponseEntity<List<CreditUsage>> getUsageHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
-        List<CreditUsage> history = creditUsageRepository.findByUserOrderByCreatedAtDesc(user);
+        Pageable pageable = PageRequest.of(page, size);
+        List<CreditUsage> history = creditUsageRepository.findByUserOrderByCreatedAtDesc(user, pageable).getContent();
         return ResponseEntity.ok(history);
     }
 
