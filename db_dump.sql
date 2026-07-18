@@ -155,7 +155,7 @@ CREATE TABLE public.payment_orders (
     status character varying(255),
     target_tier character varying(255),
     user_id bigint NOT NULL,
-    CONSTRAINT payment_orders_target_tier_check CHECK (((target_tier)::text = ANY ((ARRAY['FREE'::character varying, 'STANDARD'::character varying, 'PRO'::character varying, 'SUPER_PRO'::character varying])::text[])))
+    CONSTRAINT payment_orders_target_tier_check CHECK (((target_tier)::text = ANY ((ARRAY['FREE'::character varying, 'STANDARD'::character varying, 'CREATOR'::character varying, 'PRO'::character varying, 'SUPER_PRO'::character varying])::text[])))
 );
 
 
@@ -386,7 +386,7 @@ CREATE TABLE public.users (
     verification_token character varying(255),
     stored_images_count integer,
     stored_videos_count integer,
-    CONSTRAINT users_subscription_tier_check CHECK (((subscription_tier)::text = ANY ((ARRAY['FREE'::character varying, 'STANDARD'::character varying, 'PRO'::character varying, 'SUPER_PRO'::character varying])::text[])))
+    CONSTRAINT users_subscription_tier_check CHECK (((subscription_tier)::text = ANY ((ARRAY['FREE'::character varying, 'STANDARD'::character varying, 'CREATOR'::character varying, 'PRO'::character varying, 'SUPER_PRO'::character varying])::text[])))
 );
 
 

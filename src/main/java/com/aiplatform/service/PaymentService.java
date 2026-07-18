@@ -137,13 +137,24 @@ public class PaymentService {
 
     private void sendPaymentReceipt(PaymentOrder order) {
         try {
-            String subject = "\u2728 Your VaniAI Upgrade is Complete!";
-            String htmlBody = emailTemplateUtils.getPaymentReceiptHtml(order);
-            emailService.sendHtmlMessage(order.getUser().getEmail(), subject, htmlBody);
+            emailService.sendPaymentReceiptEmail(order);
+            log.info("✅ [PaymentService] Payment receipt email sent to {} for order {} (Plan: {}, Amount: ₹{})", 
+                order.getUser().getEmail(), 
+                order.getRazorpayOrderId(), 
+                order.getTargetTier(),
+                order.getAmount() / 100.0);
+
+            // Admin alert for large payments (≥ ₹500)
+            double amountInr = order.getAmount() / 100.0;
+            if (amountInr >= 500) {
+                try {
+                    emailService.sendAdminLargePaymentAlert(
+                        order.getUser(), order.getRazorpayOrderId(), amountInr);
+                } catch (Exception ignored) {}
+            }
         } catch (Exception e) {
             log.error("\u274C [PaymentService] Failed to send receipt for order {}: {}", order.getRazorpayOrderId(), e.getMessage());
         }
     }
 
 }
-// Forced refresh

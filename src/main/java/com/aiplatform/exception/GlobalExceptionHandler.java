@@ -17,6 +17,21 @@ import org.slf4j.LoggerFactory;
 public class GlobalExceptionHandler {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(AiOverloadException.class)
+    public ResponseEntity<StandardErrorResponse> handleAiOverloadException(AiOverloadException ex, WebRequest request) {
+        StandardErrorResponse errorResponse = StandardErrorResponse.builder()
+                .status(HttpStatus.TOO_MANY_REQUESTS.value())
+                .message(ex.getMessage())
+                .path(((ServletWebRequest)request).getRequest().getRequestURI())
+                .timestamp(LocalDateTime.now())
+                .traceId(UUID.randomUUID().toString())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(errorResponse);
+    }
+
     @ExceptionHandler(TokenRefreshException.class)
     public ResponseEntity<StandardErrorResponse> handleTokenRefreshException(TokenRefreshException ex, WebRequest request) {
         return buildErrorResponse(HttpStatus.FORBIDDEN, ex.getMessage(), request);

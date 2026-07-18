@@ -29,6 +29,8 @@ public class VideoCreditService {
     private final UserRepository userRepository;
     private final PaymentOrderRepository paymentOrderRepository;
     private final RazorpayClient razorpayClient; // injected shared bean
+    private final EmailService emailService;
+    private final com.aiplatform.util.EmailTemplateUtils emailTemplateUtils;
 
     @Value("${razorpay.key.secret}")
     private String razorpayKeySecret;
@@ -172,6 +174,9 @@ public class VideoCreditService {
         log.info("Video credits added: {} x {} for user {}", order.getVideoCreditsPurchased(),
                 order.getVideoModelId(), user.getEmail());
 
+        // 5. Send receipt email
+        sendVideoCreditReceipt(order);
+
         return Map.of(
             "status",           "success",
             "message",          order.getVideoCreditsPurchased() + " video credits added to your wallet",
@@ -179,6 +184,21 @@ public class VideoCreditService {
             "creditsAdded",     order.getVideoCreditsPurchased(),
             "newBalance",       getWalletBalance(user)
         );
+    }
+
+    private void sendVideoCreditReceipt(PaymentOrder order) {
+        try {
+            emailService.sendPaymentReceiptEmail(order);
+            log.info("✅ [VideoCreditService] Video credit receipt email sent to {} for order {} ({} x {}, Amount: ₹{})", 
+                order.getUser().getEmail(), 
+                order.getRazorpayOrderId(), 
+                order.getVideoCreditsPurchased(),
+                order.getVideoModelId(),
+                order.getAmount() / 100.0);
+        } catch (Exception e) {
+            log.error("\u274C [VideoCreditService] Failed to send video credit receipt for order {}: {}", 
+                order.getRazorpayOrderId(), e.getMessage());
+        }
     }
 
     // ── Deduct credit on video generation ───────────────────────────────────

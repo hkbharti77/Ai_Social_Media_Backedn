@@ -1,0 +1,34 @@
+<div th:fragment="content">
+    <h2 style="color: #ff66b2;">👤 New User Registered</h2>
+    <p>A new user has joined the GyanVaniAi platform. Here are the registration details for your review.</p>
+    
+    <div style="background-color: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h4 style="margin: 0 0 16px 0; color: #ff66b2; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;">User Details</h4>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">Name:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${name}">Name</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">Email:</td>
+                <td align="right" style="color: #3399ff; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${email}">Email</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">IP Address:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${ipAddress}">0.0.0.0</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 14px;">Registered At:</td>
+                <td align="right" style="color: #ff66b2; font-size: 14px; font-weight: 600;" th:text="${registeredAt} + ' IST'">Date</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="button-container">
+        <a th:href="${adminUrl}" class="button">👥 View User Directory</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        GyanVaniAi Admin Notification System
+    </p>
+</div>

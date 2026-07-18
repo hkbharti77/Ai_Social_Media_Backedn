@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${subject}">GyanVaniAi Notification</title>
+    <style>
+        /* Base styles */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #000000;
+            line-height: 1.6;
+        }
+
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: #ffffff;
+            padding-bottom: 40px;
+        }
+
+        .main {
+            background-color: #ffffff;
+            margin: 0 auto;
+            width: 100%;
+            max-width: 600px;
+            border-spacing: 0;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #000000;
+            margin-top: 40px;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #3399ff 0%, #3399ff 100%);
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+        }
+
+        .logo-box {
+            background: rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-bottom: 16px;
+            line-height: 48px;
+            font-size: 24px;
+        }
+
+        /* Body */
+        .content {
+            padding: 40px 32px;
+            background-color: #ffffff;
+        }
+
+        .content h2 {
+            color: #000000;
+            margin-top: 0;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .content p {
+            margin-bottom: 24px;
+        }
+
+        /* Button */
+        .button-container {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .button {
+            background-color: #3399ff;
+            color: #ffffff !important;
+            padding: 14px 32px;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 16px;
+            display: inline-block;
+            transition: background-color 0.3s ease;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 32px;
+            text-align: center;
+            font-size: 13px;
+            color: #000000;
+            background-color: #ffffff;
+        }
+
+        .footer a {
+            color: #3399ff;
+            text-decoration: none;
+        }
+
+        .social-links {
+            margin-bottom: 20px;
+        }
+
+        .social-links a {
+            margin: 0 10px;
+            display: inline-block;
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background-color: #000000;
+            margin: 32px 0;
+        }
+
+        /* Mobile specific */
+        @media screen and (max-width: 600px) {
+            .content {
+                padding: 32px 20px;
+            }
+            .main {
+                border-radius: 0;
+                margin-top: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <table class="main" role="presentation">
+            <!-- Header Fragment -->
+            <tr>
+                <td class="header">
+                    <div class="logo-box">🎓</div>
+                    <h1 th:text="${headerTitle ?: 'GyanVaniAi'}">GyanVaniAi</h1>
+                </td>
+            </tr>
+
+            <!-- Body Fragment -->
+            <tr>
+                <td class="content">
+                    <div th:if="${rawContent != null}" th:utext="${rawContent}">
+                        <!-- Raw HTML content from legacy methods -->
+                    </div>
+                    <div th:if="${rawContent == null}" th:replace="~{__${contentFragment}__}">
+                        <!-- Default content if none provided -->
+                        <h2>Hello!</h2>
+                        <p>This is a default message from GyanVaniAi.</p>
+                    </div>
+                    
+                    <div class="divider"></div>
+                    
+                    <p style="font-size: 14px; margin-bottom: 0;">
+                        Best regards,<br>
+                        <strong>The GyanVaniAi Team</strong>
+                    </p>
+                </td>
+            </tr>
+
+            <!-- Footer Fragment -->
+            <tr>
+                <td class="footer">
+                    <div class="social-links">
+                        <a href="#">Twitter</a>
+                        <a href="#">LinkedIn</a>
+                        <a href="#">Instagram</a>
+                    </div>
+                    <p>
+                        &copy; 2025 GyanVaniAi. All rights reserved.<br>
+                        Innovating Social Media with AI.
+                    </p>
+                    <p>
+                        <a href="#">Privacy Policy</a> &bull; 
+                        <a href="#">Terms of Service</a> &bull; 
+                        <a href="#">Unsubscribe</a>
+                    </p>
+                    <p style="margin-top: 10px;">
+                        GyanVaniAi HQ, New Delhi, India
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Creator!</h2>
+    <p>Your <strong th:style="'color:' + ${platformColor}" th:text="${platformEmoji} + ' ' + ${platformDisplay}">Platform</strong> account has been successfully connected to GyanVaniAi.</p>
+    
+    <div style="background-color: rgba(30, 36, 51, 0.5); border: 1px solid #000000; border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h4 style="margin: 0 0 16px 0; color: #3399ff; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;">Connection Details</h4>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">Platform:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${platformDisplay}">Platform</td>
+            </tr>
+            <tr th:if="${accountName != null}">
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">Account:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${accountName}">Account Name</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 14px;">Connected At:</td>
+                <td align="right" style="color: #ff66b2; font-size: 14px; font-weight: 600;" th:text="${connectedAt} + ' IST'">Date</td>
+            </tr>
+        </table>
+    </div>
+
+    <p>You can now schedule and publish posts directly to this platform from GyanVaniAi. Automate your reach and save time!</p>
+    
+    <div class="button-container">
+        <a th:href="${manageUrl}" class="button">Manage Connections</a>
+    </div>
+
+    <p style="color: #000000; font-size: 13px; margin-top: 32px;">
+        <strong>Security Alert:</strong> If you did not connect this account, please <a th:href="${manageUrl}" style="color: #ef4444; font-weight: 600;">disconnect it immediately</a>.
+    </p>
+</div>

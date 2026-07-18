@@ -1,0 +1,25 @@
+<div th:fragment="content">
+    <h2 th:text="'Welcome back, ' + ${name} + '!'">Welcome back, Admin!</h2>
+    <p>You have requested a temporary access password for the GyanVaniAi Admin Panel.</p>
+    
+    <div style="background-color: rgba(37, 99, 235, 0.1); border: 2px dashed rgba(37, 99, 235, 0.3); border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center;">
+        <p style="color: #000000; font-size: 13px; margin-top: 0; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: bold;">Your Temporary Admin Password:</p>
+        <div style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: bold; color: #3399ff; letter-spacing: 4px; padding: 10px; background: white; display: inline-block; border-radius: 8px; border: 1px solid #000000;" th:text="${password}">ADMIN789</div>
+    </div>
+
+    <p>This password is for <strong>one-time use</strong> or will expire shortly. For security reasons, please log in immediately and perform your administrative tasks.</p>
+    
+    <div class="button-container">
+        <a th:href="${loginUrl}" class="button" style="background: #ffffff;">Go to Admin Login</a>
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; background-color: #ffffff; border-left: 4px solid #ff66b2; border-radius: 4px;">
+        <p style="color: #000000; font-size: 13px; margin: 0;">
+            <strong>Security Alert:</strong> If you did not request this access, please notify the security team immediately. This login attempt was recorded with your IP address and device information.
+        </p>
+    </div>
+
+    <p style="color: #000000; font-size: 12px; margin-top: 32px; text-align: center;">
+        Secure Administrative Access Protocol &bull; GyanVaniAi Platform
+    </p>
+</div>

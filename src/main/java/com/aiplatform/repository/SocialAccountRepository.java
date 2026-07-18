@@ -14,4 +14,5 @@ public interface SocialAccountRepository extends JpaRepository<SocialAccount, Lo
     Optional<SocialAccount> findByUserAndPlatformAndPageId(User user, String platform, String pageId);
     Optional<SocialAccount> findByUserAndPlatformAndIgBusinessAccountId(User user, String platform, String igBusinessAccountId);
     List<SocialAccount> findByUserAndPlatform(User user, String platform);
+    List<SocialAccount> findByFacebookUserId(String facebookUserId);
 }

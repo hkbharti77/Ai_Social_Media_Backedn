@@ -4,15 +4,10 @@ import com.aiplatform.dto.ContentGenerationDtos.*;
 import com.aiplatform.model.BusinessProfile;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.BusinessProfileRepository;
-import com.aiplatform.service.AiContentService;
-import com.aiplatform.service.SubscriptionService;
-import com.aiplatform.service.VideoCreditService;
-import com.aiplatform.service.VideoLimitService;
-import com.aiplatform.service.VeoVideoService;
+import com.aiplatform.service.*;
 import com.aiplatform.util.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +20,9 @@ import java.util.List;
 public class AiController {
 
     private final AiContentService aiContentService;
+    private final AiStrategyService aiStrategyService;
+    private final AiEngagementService aiEngagementService;
+    private final AiCampaignService aiCampaignService;
     private final VeoVideoService veoVideoService;
     private final SubscriptionService subscriptionService;
     private final VideoLimitService videoLimitService;
@@ -36,10 +34,7 @@ public class AiController {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
-        String userTier = user.getSubscriptionTier() != null
-                ? user.getSubscriptionTier().name().replace("_", " ") : "Free";
-        // Normalise enum name (SUPER_PRO → "Super Pro")
-        userTier = toDisplayTierName(user.getSubscriptionTier());
+        String userTier = toDisplayTierName(user.getSubscriptionTier());
 
         int remaining = videoLimitService.getRemainingFreeVideos(user.getId());
         int monthlyLimit = VideoLimitService.getMonthlyVideoLimit(userTier.toLowerCase());
@@ -78,7 +73,6 @@ public class AiController {
         
         BusinessProfile bp = getFirstProfile(user);
 
-        // Security Cap: Ensure count is within limits (redundant with @Valid but safe)
         int count = Math.min(request.getCount(), 20);
         request.setCount(count);
 
@@ -101,12 +95,15 @@ public class AiController {
     }
 
     @PostMapping("/gap-analysis")
-    public ResponseEntity<ContentGapResponse> generateGapAnalysis(@Valid @RequestBody ContentGapRequest request) {
+    public ResponseEntity<GapAnalysisResponse> generateGapAnalysis(@Valid @RequestBody ContentGapRequest request) {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         BusinessProfile bp = getFirstProfile(user);
-        return ResponseEntity.ok(aiContentService.generateGapAnalysis(request, bp, user.getId()));
+        // Note: Strategy service method signature might need adjustment or Controller extracts fields
+        return ResponseEntity.ok(aiStrategyService.generateGapAnalysis(
+                bp.getBusinessName(), bp.getNiche(), request.getBusinessType(), request.getCity(), request.getTargetAudience(), user.getId()
+        ));
     }
 
     @PostMapping("/predict-performance")
@@ -115,16 +112,16 @@ public class AiController {
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         BusinessProfile bp = getFirstProfile(user);
-        return ResponseEntity.ok(aiContentService.predictPerformance(request.getDraft(), bp, user.getId()));
+        return ResponseEntity.ok(aiStrategyService.predictPerformance(bp, request.getDraft(), user.getId()));
     }
 
     @GetMapping("/content-strategy")
-    public ResponseEntity<ContentGapResponse> generateContentStrategy() {
+    public ResponseEntity<ContentStrategyResponse> generateContentStrategy() {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
 
         BusinessProfile bp = getFirstProfile(user);
-        return ResponseEntity.ok(aiContentService.generateContentStrategy(bp, user.getId()));
+        return ResponseEntity.ok(aiStrategyService.generateContentStrategy(bp.getNiche(), "Global", bp.getTargetAudience(), user.getId()));
     }
 
     @PostMapping("/meme")
@@ -133,7 +130,7 @@ public class AiController {
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         BusinessProfile bp = getFirstProfile(user);
-        return ResponseEntity.ok(aiContentService.generateMeme(bp, request.getModelId(), request.getCommand(), user.getId()));
+        return ResponseEntity.ok(aiEngagementService.generateMeme(bp, request.getModelId(), request.getCommand(), user.getId()));
     }
 
     @PostMapping("/viral-opportunity")
@@ -142,7 +139,7 @@ public class AiController {
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         BusinessProfile bp = getFirstProfile(user);
-        return ResponseEntity.ok(aiContentService.generateViralOpportunity(bp, request.getNicheTopic(), user.getId()));
+        return ResponseEntity.ok(aiEngagementService.generateViralOpportunity(bp, request.getNicheTopic(), user.getId()));
     }
 
     @PostMapping("/carousel")
@@ -161,7 +158,6 @@ public class AiController {
         
         BusinessProfile bp = getFirstProfile(user);
         
-        // Handle Aspect Ratio Override
         if (request.getAspectRatio() != null && !request.getAspectRatio().isEmpty()) {
             try {
                 bp = (BusinessProfile) bp.clone();
@@ -171,7 +167,7 @@ public class AiController {
             }
         }
 
-        List<GeneratedPost> generatedPosts = aiContentService.repurposeContent(bp, request, user.getId(), request.getModelId());
+        List<GeneratedPost> generatedPosts = aiCampaignService.repurposeContent(bp, request, user.getId(), request.getModelId());
         return ResponseEntity.ok(new GenerationResponse(generatedPosts));
     }
 
@@ -181,7 +177,7 @@ public class AiController {
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         BusinessProfile bp = getFirstProfile(user);
-        return ResponseEntity.ok(aiContentService.generatePoll(bp, request.getCommand(), user.getId(), request.getModelId()));
+        return ResponseEntity.ok(aiEngagementService.generatePoll(bp, request.getCommand(), user.getId(), request.getModelId()));
     }
 
     @PostMapping("/reel")
@@ -193,12 +189,9 @@ public class AiController {
 
         if (Boolean.TRUE.equals(request.getGenerateActualVideo())) {
             String userTier = toDisplayTierName(user.getSubscriptionTier());
-
-            // Determine which Veo model to use
             String selectedModelId = request.getVideoModelId() != null ? request.getVideoModelId() : "veo-lite";
             com.aiplatform.model.VeoModelSelection veoModel = com.aiplatform.model.VeoModelSelection.fromModelId(selectedModelId);
 
-            // Validate tier access (throws if Free/Creator or wrong model for tier)
             try {
                 videoLimitService.validateAndCheckVideoAccess(user.getId(), userTier, veoModel);
             } catch (com.aiplatform.exception.InsufficientCreditsException e) {
@@ -210,7 +203,6 @@ public class AiController {
                     ));
             }
 
-            // Check wallet — user must have a credit for this model
             if (!videoCreditService.hasCreditForModel(user, veoModel)) {
                 int cheapestPack = switch (veoModel) {
                     case VEO_LITE     -> 55;
@@ -223,16 +215,13 @@ public class AiController {
                         "message",           "You have no " + veoModel.getQualityTier() + " video credits. Buy a pack to continue.",
                         "modelId",           veoModel.getModelId(),
                         "cheapestPackPrice", "₹" + cheapestPack,
-                        "buyCreditsUrl",     "/api/v1/video-credits/packs/" + veoModel.getModelId(),
                         "wallet",            videoCreditService.getWalletBalance(user)
                     ));
             }
 
-            // Deduct 1 credit and generate
             try {
                 videoCreditService.deductVideoCredit(user.getId(), veoModel);
                 VideoGenerationResponse videoResponse = veoVideoService.generateVideo(bp, request, user.getId());
-
                 java.util.Map<String, Object> wallet = videoCreditService.getWalletBalance(user);
 
                 return ResponseEntity.ok(java.util.Map.of(
@@ -248,12 +237,10 @@ public class AiController {
                 return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(e.getMessage());
             } catch (Exception e) {
                 videoCreditService.refundVideoCredit(user.getId(), veoModel);
-                org.slf4j.LoggerFactory.getLogger(AiController.class).error("Reel generation error", e);
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body("Video generation failed: " + e.getMessage());
             }
         }
 
-        // Script-only generation (available for all tiers)
         return ResponseEntity.ok(aiContentService.generateReel(bp, request.getCommand(), user.getId(), request.getModelId(), request));
     }
 
@@ -283,7 +270,7 @@ public class AiController {
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         
         BusinessProfile bp = getFirstProfile(user);
-        return ResponseEntity.ok(aiContentService.generateCampaign(bp, request, user.getId()));
+        return ResponseEntity.ok(aiCampaignService.generateCampaign(bp, request, user.getId()));
     }
 
     private BusinessProfile getFirstProfile(User user) {
@@ -294,4 +281,3 @@ public class AiController {
         return profiles.get(0);
     }
 }
-

@@ -48,18 +48,18 @@ public class PostSchedulerTask {
     @Scheduled(fixedRate = 60000) // Every minute
     public void processScheduledPosts() {
         LocalDateTime now = LocalDateTime.now(IST);
-        logger.info("⏰ [Scheduler] Initiating check for due posts at {} IST", now);
+        logger.info("[Scheduler] Initiating check for due posts at {} IST", now);
 
         try {
             List<Post> duePosts = postRepository.findByStatusAndScheduledAtBefore(
                     PostStatus.SCHEDULED, now);
 
             if (duePosts.isEmpty()) {
-                logger.debug("✅ [Scheduler] No posts due for transmission at this time.");
+                logger.debug("[Scheduler] No posts due for transmission at this time.");
                 return;
             }
 
-            logger.info("🚀 [Scheduler] Found {} posts due for transmission. Dispatching...", duePosts.size());
+            logger.info("[Scheduler] Found {} posts due for transmission. Dispatching...", duePosts.size());
 
             for (Post post : duePosts) {
                 try {
@@ -86,7 +86,7 @@ public class PostSchedulerTask {
     public void masterSchedulingTick() {
         LocalTime now = LocalTime.now(IST).withSecond(0).withNano(0);
         String timeStr = now.toString();
-        logger.info("🕒 [Scheduler] Tick at {} IST", timeStr);
+        logger.info("[Scheduler] Tick at {} IST", timeStr);
 
         try {
             // 1. Check for Morning Draft Generation
@@ -138,7 +138,7 @@ public class PostSchedulerTask {
     public void evergreenDailyFill() {
         LocalDateTime now = LocalDateTime.now(IST);
         DayOfWeek today = now.getDayOfWeek();
-        logger.info("🌿 [Evergreen] Daily fill check at {} ({})", now, today);
+        logger.info("[Evergreen] Daily fill check at {} ({})", now, today);
 
         LocalDateTime morningSlot = LocalDate.now(IST).atTime(9, 0);
         LocalDateTime eveningSlot = LocalDate.now(IST).atTime(20, 0);

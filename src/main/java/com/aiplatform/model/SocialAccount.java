@@ -25,6 +25,9 @@ public class SocialAccount {
     @Column(nullable = false)
     private String platform; // 'FACEBOOK' | 'INSTAGRAM'
 
+    @Column(name = "facebook_user_id")
+    private String facebookUserId;
+
     @Column(name = "encrypted_token", length = 1000)
     private String encryptedAccessToken;
 

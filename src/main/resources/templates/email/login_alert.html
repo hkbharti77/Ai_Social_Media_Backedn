@@ -1,0 +1,53 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste User!</h2>
+    <p th:text="${isNewIp} ? 'A login to your GyanVaniAi account was detected from a new IP address or device.' : 'A successful login to your GyanVaniAi account was recorded.'">Login notification</p>
+    
+    <div th:style="'background-color:' + (${isNewIp} ? 'rgba(245, 158, 11, 0.08)' : 'rgba(59, 130, 246, 0.08)') + '; border: 1px solid ' + (${isNewIp} ? 'rgba(245, 158, 11, 0.2)' : '#3399ff') + '; border-radius: 8px; margin: 24px 0; padding: 12px; text-align: center;'">
+        <p th:style="'color:' + (${isNewIp} ? '#ff66b2' : '#3399ff') + '; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;'" th:text="${alertLabel}">LOGIN STATUS</p>
+    </div>
+
+    <div style="background-color: rgba(30, 36, 51, 0.5); border: 1px solid #000000; border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h4 style="margin: 0 0 16px 0; color: #60a5fa; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;">🔐 Login Details</h4>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 12px;">Time:</td>
+                <td align="right" style="color: #000000; font-size: 13px; font-weight: 600; padding-bottom: 12px;" th:text="${loginTime} + ' IST'">Date</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 12px;">IP Address:</td>
+                <td align="right" th:style="'color:' + (${isNewIp} ? '#ff66b2' : '#000000') + '; font-size: 13px; font-weight: 700; padding-bottom: 12px;'" th:text="${ipAddress} + (${isNewIp} ? ' 🆕' : '')">0.0.0.0</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 12px;" th:text="${deviceEmoji} + ' Device:'">Device:</td>
+                <td align="right" style="color: #000000; font-size: 13px; font-weight: 600; padding-bottom: 12px;" th:text="${deviceType}">Type</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 12px;">Browser:</td>
+                <td align="right" style="color: #000000; font-size: 13px; font-weight: 600; padding-bottom: 12px;" th:text="${browser}">Browser</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px;">OS:</td>
+                <td align="right" style="color: #000000; font-size: 13px; font-weight: 600;" th:text="${os}">OS</td>
+            </tr>
+        </table>
+    </div>
+
+    <div th:if="${isNewIp}" style="background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 20px; margin-bottom: 32px;">
+        <p style="color: #fca5a5; font-size: 13px; margin: 0; line-height: 1.6;">
+            ⚠️ <strong>Was this you?</strong> If you did not log in from this location, your account may be compromised. Secure your account immediately by changing your password.
+        </p>
+    </div>
+
+    <div class="button-container" th:style="${isNewIp} ? 'display: flex; gap: 16px; justify-content: center;' : 'text-align: center;'">
+        <a th:href="${securityUrl}" class="button" th:style="${isNewIp} ? 'background-color: #ef4444;' : ''">Secure Account</a>
+        <a th:if="${isNewIp}" th:href="${manageUrl}" class="button" style="background-color: #ff66b2;">Review Activity</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;" th:if="${!isNewIp}">
+        If this was you, no action is needed. If you don't recognize this login, please change your password immediately.
+    </p>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 24px;">
+        Regards,<br>GyanVaniAi Security Team
+    </p>
+</div>

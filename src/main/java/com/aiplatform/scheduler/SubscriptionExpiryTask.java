@@ -55,4 +55,42 @@ public class SubscriptionExpiryTask {
 
         log.info("\ud83d\udce1 [SubscriptionTask] Successfully processed {} downgrades.", expiredUsers.size());
     }
+
+    /**
+     * Runs daily at 10:00 AM IST to send renewal reminders (3 days and 1 day before expiry).
+     */
+    @Scheduled(cron = "0 30 4 * * *") // 10:00 AM IST = 04:30 UTC
+    @Transactional
+    public void sendRenewalReminders() {
+        LocalDateTime now = LocalDateTime.now();
+        log.info("⏰ [SubscriptionTask] Checking renewal reminders at {}", now);
+
+        // 3-day reminder window: expires between 2d23h and 3d1h from now
+        LocalDateTime threeDayStart = now.plusDays(2).plusHours(23);
+        LocalDateTime threeDayEnd   = now.plusDays(3).plusHours(1);
+
+        // 1-day reminder window: expires between 23h and 25h from now
+        LocalDateTime oneDayStart = now.plusHours(23);
+        LocalDateTime oneDayEnd   = now.plusHours(25);
+
+        List<User> allPremium = userRepository.findAllBySubscriptionTierNotAndSubscriptionExpiresAtAfter(
+                SubscriptionTier.FREE, now);
+
+        int reminded = 0;
+        for (User user : allPremium) {
+            if (user.getSubscriptionExpiresAt() == null) continue;
+            LocalDateTime expiry = user.getSubscriptionExpiresAt();
+
+            if (expiry.isAfter(threeDayStart) && expiry.isBefore(threeDayEnd)) {
+                emailService.sendRenewalReminderEmail(user, 3);
+                log.info("📧 [SubscriptionTask] 3-day reminder sent to {}", user.getEmail());
+                reminded++;
+            } else if (expiry.isAfter(oneDayStart) && expiry.isBefore(oneDayEnd)) {
+                emailService.sendRenewalReminderEmail(user, 1);
+                log.info("📧 [SubscriptionTask] 1-day reminder sent to {}", user.getEmail());
+                reminded++;
+            }
+        }
+        log.info("✅ [SubscriptionTask] Sent {} renewal reminders.", reminded);
+    }
 }

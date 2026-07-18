@@ -99,10 +99,23 @@ public class AdminManagementController {
         ));
     }
 
+    @PostMapping("/users/{userId}/reset-password")
+    public ResponseEntity<Map<String, String>> resetUserPassword(@PathVariable Long userId) {
+        validateOwner();
+        adminManagementService.resetUserPassword(userId);
+        return ResponseEntity.ok(Map.of("message", "User password has been reset and emailed."));
+    }
+
     @GetMapping("/users/{userId}/profile")
     public ResponseEntity<AdminUserProfileResponse> getUserProfile(@PathVariable Long userId) {
         validateOwner();
         return ResponseEntity.ok(adminManagementService.getUserProfile(userId));
+    }
+
+    @GetMapping("/users/summaries")
+    public ResponseEntity<List<UserSummary>> getAllUsersSummaries() {
+        validateOwner();
+        return ResponseEntity.ok(adminManagementService.getAllUsersSummaries());
     }
 
     // ==================== Fraud and Security ====================

@@ -1,0 +1,20 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Creator!</h2>
+    <p>Your <strong th:text="${tier}">PREMIUM</strong> plan is expiring <strong th:style="${isFinal} ? 'color: #ef4444;' : 'color: #ff66b2;'" th:text="${isFinal} ? 'tomorrow' : 'in ' + ${daysLeft} + ' days'">soon</strong>.</p>
+    
+    <div th:style="'background-color:' + (${isFinal} ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)') + '; border: 1px solid ' + (${isFinal} ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)') + '; border-radius: 16px; padding: 40px; margin: 32px 0; text-align: center;'">
+        <p th:style="'color:' + (${isFinal} ? '#ef4444' : '#ff66b2') + '; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 8px 0;'" th:text="${isFinal} ? '⚠️ FINAL REMINDER' : '⏰ RENEWAL REMINDER'">RENEWAL REMINDER</p>
+        <h1 th:style="'color:' + (${isFinal} ? '#ef4444' : '#ff66b2') + '; font-size: 32px; font-weight: 800; margin: 0;'" th:text="${isFinal} ? '1 Day Left' : ${daysLeft} + ' Days Left'">3 Days Left</h1>
+        <p style="color: #000000; font-size: 13px; margin: 8px 0 0 0;" th:text="'Expires: ' + ${expiresAt} + ' IST'">Expires Date</p>
+    </div>
+
+    <p>Renew now to keep your scheduled posts running and maintain access to all premium AI features without interruption. Don't lose your momentum!</p>
+    
+    <div class="button-container">
+        <a th:href="${pricingUrl}" class="button" th:style="'background-color:' + (${isFinal} ? '#ef4444' : '#3399ff') + ';'" th:text="'Renew ' + ${tier} + ' Plan'">Renew Plan</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        Need to change your plan? You can explore other options on our <a th:href="${pricingUrl}">pricing page</a>.
+    </p>
+</div>

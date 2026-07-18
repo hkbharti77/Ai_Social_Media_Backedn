@@ -23,11 +23,14 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import org.springframework.context.annotation.Configuration;
+
 import java.util.Arrays;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+    
     @Autowired
     UserDetailsServiceImpl userDetailsService;
 
@@ -76,7 +79,10 @@ public class SecurityConfig {
                                 .requestMatchers("/api/v1/auth/owner/refresh-access").hasRole("ADMIN")
                                 .requestMatchers("/api/v1/auth/**", "/api/auth/**").permitAll()
                                 .requestMatchers("/api/v1/social/callback/**").permitAll()
+                                .requestMatchers("/api/v1/social/facebook/**").permitAll()
                                 .requestMatchers("/api/v1/payments/webhook").permitAll()
+                                .requestMatchers("/api/v1/ai/jobs/**").permitAll()
+                                .requestMatchers("/api/v1/jobs/**").permitAll()
                                 .requestMatchers("/api/v1/test/**", "/api/test/**", "/api/v1/owner/**").hasRole("ADMIN")
                                 .requestMatchers("/m/**", "/api/v1/microsite/{brandSlug}").permitAll()
                                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

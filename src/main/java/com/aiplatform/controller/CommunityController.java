@@ -1,6 +1,7 @@
 package com.aiplatform.controller;
 
 import com.aiplatform.model.Comment;
+import com.aiplatform.model.SubscriptionTier;
 import com.aiplatform.model.User;
 import com.aiplatform.service.CommunityManagerService;
 import com.aiplatform.util.SecurityUtils;
@@ -17,6 +18,13 @@ import java.util.Map;
 public class CommunityController {
 
     private final CommunityManagerService communityManagerService;
+ 
+    private void validateProAccess(User user) {
+        SubscriptionTier tier = user.getSubscriptionTier();
+        if (tier != SubscriptionTier.PRO && tier != SubscriptionTier.SUPER_PRO) {
+            throw new RuntimeException("Community Hub requires a PRO or SUPER PRO subscription. Your current tier: " + tier);
+        }
+    }
 
     @GetMapping("/inbox")
     public ResponseEntity<List<Comment>> getInbox(
@@ -24,6 +32,7 @@ public class CommunityController {
             @RequestParam(required = false) String priority) {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("User not authenticated"));
+        validateProAccess(user);
         return ResponseEntity.ok(communityManagerService.getInbox(user, sentiment, priority));
     }
 
@@ -31,6 +40,7 @@ public class CommunityController {
     public ResponseEntity<List<Comment>> syncComments() {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("User not authenticated"));
+        validateProAccess(user);
         return ResponseEntity.ok(communityManagerService.syncComments(user));
     }
 
@@ -38,6 +48,7 @@ public class CommunityController {
     public ResponseEntity<Map<String, String>> draftReply(@PathVariable Long commentId) {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("User not authenticated"));
+        validateProAccess(user);
         String draft = communityManagerService.draftReply(commentId, user);
         return ResponseEntity.ok(Map.of("draft", draft));
     }
@@ -46,6 +57,7 @@ public class CommunityController {
     public ResponseEntity<Void> sendReply(@PathVariable Long commentId, @RequestBody Map<String, String> request) {
         User user = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new RuntimeException("User not authenticated"));
+        validateProAccess(user);
         String replyText = request.get("replyText");
         communityManagerService.sendReply(commentId, replyText, user);
         return ResponseEntity.ok().build();

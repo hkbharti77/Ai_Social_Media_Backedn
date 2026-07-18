@@ -1,0 +1,34 @@
+<div th:fragment="content">
+    <h2 style="color: #3399ff;">💰 Large Payment Received</h2>
+    <p>A high-value payment transaction has been processed on GyanVaniAi. Please verify the details in the admin panel.</p>
+    
+    <div style="background-color: rgba(59, 130, 246, 0.08); border: 1px solid #3399ff; border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h4 style="margin: 0 0 16px 0; color: #3399ff; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;">Payment Details</h4>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">User:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${email}">Email</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 8px;">Order ID:</td>
+                <td align="right" style="color: #000000; font-size: 12px; font-weight: 600; padding-bottom: 8px; word-break: break-all;" th:text="${orderId}">#</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">Paid At:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${paidAt} + ' IST'">Date</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 16px; font-weight: 700; padding-top: 8px;">AMOUNT:</td>
+                <td align="right" style="color: #3399ff; font-size: 20px; font-weight: 800; padding-top: 8px;" th:text="'₹ ' + ${amount}">₹ 0.00</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="button-container">
+        <a th:href="${adminUrl}" class="button">📈 View Payment Analytics</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        GyanVaniAi Admin Notification System
+    </p>
+</div>

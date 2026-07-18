@@ -1,0 +1,18 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Learner!</h2>
+    <p>Your premium tier access has expired and your account has been automatically shifted to the <strong>FREE</strong> tier. We'd love to have you back on our premium experience!</p>
+    
+    <div style="background-color: rgba(30, 36, 51, 0.5); border: 1px solid #000000; border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <p style="color: #000000; font-size: 15px; margin: 0; line-height: 1.6;">
+            To restore your high-limit generating capacity, access advanced AI models, and continue using premium scheduling features, please renew your subscription.
+        </p>
+    </div>
+
+    <div class="button-container">
+        <a th:href="${pricingUrl}" class="button">Renew Subscription</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        If you have any questions about our plans, feel free to check our <a th:href="${pricingUrl}">pricing page</a> or contact support.
+    </p>
+</div>

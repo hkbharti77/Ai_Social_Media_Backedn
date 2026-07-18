@@ -10,13 +10,19 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         format_sql: false
         dialect: org.hibernate.dialect.PostgreSQLDialect
         default_batch_fetch_size: 50   # Fallback batch-fetch for any remaining lazy collections
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
 
   data:
     redis:
@@ -71,6 +77,14 @@ management:
       show-details: always
       probes:
         enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  observations:
+    key-values:
+      application: ${spring.application.name}
 
 mail:
   sender: ${SENDER_EMAIL:ewardmacllum@gmail.com}
@@ -131,7 +145,11 @@ jwt:
   refresh-token:
     expiration: 604800000 # 7 days
 
+
+
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} [TraceId: %X{traceId:-}, SpanId: %X{spanId:-}] - %msg%n"
   file:
     name: logs/ai-platform.log
   level:
@@ -144,3 +162,7 @@ x:
     secret: ${X_CLIENT_SECRET}
   redirect:
     uri: ${X_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/x}
+  default:
+    access-token: ${X_DEFAULT_ACCESS_TOKEN:}
+    refresh-token: ${X_DEFAULT_REFRESH_TOKEN:}
+    user-id: ${X_DEFAULT_USER_ID:}

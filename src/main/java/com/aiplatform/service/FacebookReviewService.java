@@ -29,7 +29,7 @@ public class FacebookReviewService {
     private final SocialAccountRepository socialAccountRepository;
     private final BusinessProfileRepository businessProfileRepository;
     private final EncryptionUtils encryptionUtils;
-    private final AiContentService aiContentService;
+    private final AiEngagementService aiEngagementService;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -37,12 +37,12 @@ public class FacebookReviewService {
             SocialAccountRepository socialAccountRepository,
             BusinessProfileRepository businessProfileRepository,
             EncryptionUtils encryptionUtils,
-            AiContentService aiContentService,
+            AiEngagementService aiEngagementService,
             RestTemplate restTemplate) {
         this.socialAccountRepository = socialAccountRepository;
         this.businessProfileRepository = businessProfileRepository;
         this.encryptionUtils = encryptionUtils;
-        this.aiContentService = aiContentService;
+        this.aiEngagementService = aiEngagementService;
         this.restTemplate = restTemplate;
     }
 
@@ -90,7 +90,7 @@ public class FacebookReviewService {
                 .stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Business Profile not found"));
         
-        return aiContentService.generateReviewReply(bp.getBusinessName(), reviewText, rating, user.getId());
+        return aiEngagementService.generateReviewReply(bp.getBusinessName(), reviewText, rating, user.getId());
     }
 
     public void postReply(User user, String reviewId, String replyText) {

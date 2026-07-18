@@ -1,0 +1,43 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Creator!</h2>
+    <p>Your <strong th:text="${postType}">Post</strong> has been successfully published on <strong th:style="'color:' + ${platformColor}" th:text="${platformEmoji} + ' ' + ${platformDisplay}">Platform</strong>.</p>
+    
+    <div th:if="${imageUrl != null}" style="margin: 32px 0;">
+        <img th:src="${imageUrl}" alt="Post Preview" style="width: 100%; max-width: 536px; border-radius: 12px; display: block; border: 1px solid #000000;" />
+    </div>
+
+    <div style="background-color: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h4 style="margin: 0 0 16px 0; color: #ff66b2; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;">Publication Details</h4>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 8px;">Platform:</td>
+                <td align="right" style="color: #000000; font-size: 13px; font-weight: 600; padding-bottom: 8px;" th:text="${platformEmoji} + ' ' + ${platformDisplay}">Platform</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 8px;">Post Type:</td>
+                <td align="right" style="color: #000000; font-size: 13px; font-weight: 600; padding-bottom: 8px;" th:text="${postType}">Post</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 8px;">Published At:</td>
+                <td align="right" style="color: #ff66b2; font-size: 13px; font-weight: 600; padding-bottom: 8px;" th:text="${publishedAt} + ' IST'">Date</td>
+            </tr>
+            <tr th:if="${externalPostId != null}">
+                <td style="color: #000000; font-size: 13px;">Post ID:</td>
+                <td align="right" style="color: #000000; font-size: 11px; font-weight: 600; word-break: break-all;" th:text="${externalPostId}">ID</td>
+            </tr>
+        </table>
+    </div>
+
+    <div th:if="${captionPreview != null && !captionPreview.isEmpty()}" style="background-color: rgba(30, 36, 51, 0.5); border: 1px solid #000000; border-radius: 12px; padding: 20px; margin-bottom: 32px;">
+        <p style="color: #3399ff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px 0;">Caption Preview</p>
+        <p style="color: #000000; font-size: 14px; line-height: 1.6; margin: 0;" th:text="${captionPreview}">Caption...</p>
+    </div>
+
+    <div class="button-container">
+        <a th:href="${calendarUrl}" class="button" style="background-color: #ff66b2;">📅 View Calendar</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        Great job! Keep the momentum going by scheduling your next post today.
+    </p>
+</div>

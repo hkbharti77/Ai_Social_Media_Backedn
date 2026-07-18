@@ -1,0 +1,13 @@
+<div th:fragment="content">
+    <h2 style="color: #ffffff; margin-bottom: 20px;">Update on your Support Ticket</h2>
+    <p style="color: #000000; font-size: 16px;">Hi <span th:text="${name}">Customer</span>,</p>
+    <p style="color: #000000; font-size: 16px;">Our support team has replied to your ticket <strong>#<span th:text="${ticketId}"></span></strong> (<span th:text="${subject}"></span>).</p>
+
+    <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #000000;">
+        <p style="color: #000000; font-size: 15px; margin: 0; white-space: pre-wrap;" th:text="${replyMessage}"></p>
+    </div>
+
+    <p style="color: #000000; font-size: 16px;">You can view your full ticket history on your dashboard.</p>
+    
+    <a th:href="${supportUrl}" style="display: inline-block; background-color: #3399ff; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 10px;">View Support Dashboard</a>
+</div>

@@ -15,6 +15,7 @@ public class PollDtos {
     public static class PollData {
         private String question;
         private List<PollOption> options;
+        @Builder.Default
         private int durationMinutes = 1440; // Default 24 hours
     }
 

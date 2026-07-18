@@ -1,0 +1,12 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Learner!</h2>
+    <p>Thank you for creating an account on GyanVaniAi. To complete your registration and unlock all AI-powered features, please verify your email address below.</p>
+    
+    <div class="button-container">
+        <a th:href="${verificationUrl}" class="button">Verify Email Address</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        If you didn't create an account, you can safely ignore this email.
+    </p>
+</div>

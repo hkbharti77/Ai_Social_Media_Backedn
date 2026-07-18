@@ -69,8 +69,12 @@ public class GeminiCacheService {
             }
         } catch (Exception e) {
             logger.error("❌ Exception during Gemini Cache creation: {}", e.getMessage());
+            // Check for Auth Failure
+            if (e.getMessage() != null && (e.getMessage().contains("401") || e.getMessage().contains("403"))) {
+                logger.error("🚫 Gemini API Authentication Failed. Please check your API Key.");
+            }
             // If the error is about token threshold, we should handle it gracefully
-            if (e.getMessage().contains("400") && e.getMessage().contains("token")) {
+            if (e.getMessage() != null && e.getMessage().contains("400") && e.getMessage().contains("token")) {
                 logger.warn("⚠️ Context too small for caching (Minimum ~2048 tokens required).");
             }
             return null;

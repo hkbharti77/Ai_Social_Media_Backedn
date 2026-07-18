@@ -166,4 +166,18 @@ public class User {
     @Builder.Default
     @Column(name = "video_credits_standard")
     private Integer videoCreditStandard = 0;
+
+    // ── Password Reset ──────────────────────────────────────────────────────────
+    @Column(name = "password_reset_token")
+    private String passwordResetToken;
+
+    @Column(name = "password_reset_token_expiry")
+    private LocalDateTime passwordResetTokenExpiry;
+
+    // ── Login Security Tracking ─────────────────────────────────────────────────
+    @Column(name = "last_login_ip")
+    private String lastLoginIp;
+
+    @Column(name = "last_login_user_agent", columnDefinition = "TEXT")
+    private String lastLoginUserAgent;
 }

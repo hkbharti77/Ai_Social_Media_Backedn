@@ -30,7 +30,7 @@ public class CommunityManagerService {
 
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
-    private final AiContentService aiContentService;
+    private final AiEngagementService aiEngagementService;
     private final BusinessProfileService businessProfileService;
     private final SocialAccountRepository socialAccountRepository;
     private final EncryptionUtils encryptionUtils;
@@ -121,7 +121,7 @@ public class CommunityManagerService {
                             .build();
 
                     // AI Triage
-                    JsonNode analysis = aiContentService.analyzeCommunitySentiment(bp, text);
+                    JsonNode analysis = aiEngagementService.analyzeCommunitySentiment(bp, text);
                     comment.setSentiment(analysis.path("sentiment").asText("NEUTRAL"));
                     comment.setPriority(analysis.path("priority").asText("MEDIUM"));
 
@@ -142,7 +142,7 @@ public class CommunityManagerService {
         BusinessProfile bp = businessProfileService.getProfile(user.getId());
         String postContext = comment.getPost() != null ? comment.getPost().getCaption() : "General engagement";
         
-        String draft = aiContentService.generateCommunityProReply(bp, comment.getText(), postContext, null);
+        String draft = aiEngagementService.generateCommunityProReply(bp, comment.getText(), postContext, null);
         comment.setAiDraftReply(draft);
         commentRepository.save(comment);
         

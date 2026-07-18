@@ -1,0 +1,37 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Creator!</h2>
+    <p>Your <strong th:text="${platformEmoji} + ' ' + ${platformDisplay}">Platform</strong> account has been disconnected from GyanVaniAi.</p>
+    
+    <div style="background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h4 style="margin: 0 0 16px 0; color: #ef4444; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;">Disconnection Details</h4>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">Platform:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${platformDisplay}">Platform</td>
+            </tr>
+            <tr th:if="${accountName != null}">
+                <td style="color: #000000; font-size: 14px; padding-bottom: 8px;">Account:</td>
+                <td align="right" style="color: #000000; font-size: 14px; font-weight: 600; padding-bottom: 8px;" th:text="${accountName}">Account Name</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 14px;">Disconnected At:</td>
+                <td align="right" style="color: #ef4444; font-size: 14px; font-weight: 600;" th:text="${disconnectedAt} + ' IST'">Date</td>
+            </tr>
+        </table>
+    </div>
+
+    <div style="background-color: #ffffff; border: 1px solid rgba(245, 158, 11, 0.1); border-radius: 12px; padding: 16px; margin-bottom: 32px;">
+        <p style="color: #ff66b2; font-size: 13px; margin: 0; line-height: 1.5;">
+            ⚠️ <strong>Security Alert:</strong> If you did NOT disconnect this account, your account may be compromised. Please change your password immediately and review your connected accounts.
+        </p>
+    </div>
+
+    <div class="button-container" style="display: flex; gap: 16px; justify-content: center;">
+        <a th:href="${reconnectUrl}" class="button">Reconnect Account</a>
+        <a th:href="${securityUrl}" class="button" style="background-color: #ef4444;">Secure Account</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        If you have any questions, our support team is always here to help.
+    </p>
+</div>

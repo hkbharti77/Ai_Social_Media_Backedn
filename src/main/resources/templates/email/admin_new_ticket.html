@@ -1,0 +1,20 @@
+<div th:fragment="content">
+    <h2 th:text="'Admin Alert!'">Admin Alert!</h2>
+    <p>A new support ticket has been created by a user.</p>
+    
+    <div style="background-color: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.2); border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h3 style="color: #ff66b2; margin-top: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 0.05em;">Ticket Overview:</h3>
+        <ul style="padding-left: 20px; margin-bottom: 0; color: #000000;">
+            <li style="margin-bottom: 8px;"><strong>Ticket ID:</strong> #<span th:text="${ticketId}">123</span></li>
+            <li style="margin-bottom: 8px;"><strong>User Email:</strong> <span th:text="${userEmail}">user@example.com</span></li>
+            <li style="margin-bottom: 8px;"><strong>Subject:</strong> <span th:text="${subject}">Issue subject</span></li>
+            <li style="margin-bottom: 8px;"><strong>Priority:</strong> <strong style="color: #ff66b2;" th:text="${priority}">CRITICAL</strong></li>
+        </ul>
+    </div>
+
+    <p>Please log in to the admin portal to review and manage this ticket.</p>
+    
+    <div class="button-container">
+        <a th:href="${adminSupportUrl}" class="button" style="background: linear-gradient(135deg, #ff66b2 0%, #ff66b2 100%);">Go to Admin Dashboard</a>
+    </div>
+</div>

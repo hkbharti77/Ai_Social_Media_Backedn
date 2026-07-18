@@ -23,6 +23,9 @@ public interface CreditUsageRepository extends JpaRepository<CreditUsage, Long> 
     // Non-paginated method for bulk operations
     List<CreditUsage> findByUserOrderByCreatedAtDesc(User user);
 
+    // Weekly report query
+    List<CreditUsage> findByUserAndCreatedAtAfter(User user, java.time.LocalDateTime after);
+
     // Platform-wide stats
     @Query("SELECT COALESCE(SUM(c.amount), 0.0) FROM CreditUsage c")
     Double sumAllCredits();

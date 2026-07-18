@@ -1,0 +1,24 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Learner!</h2>
+    <p>Welcome to GyanVaniAi! Your AI-powered social media command center is officially live and ready to transform your digital presence.</p>
+    
+    <div style="background-color: #ffffff; border: 1px solid #3399ff; border-radius: 12px; padding: 24px; margin: 32px 0;">
+        <h3 style="color: #3399ff; margin-top: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 0.05em;">Your Account Status:</h3>
+        <ul style="padding-left: 20px; margin-bottom: 0; color: #000000;">
+            <li style="margin-bottom: 8px;"><strong th:text="${credits}">0</strong> AI Credits Available</li>
+            <li style="margin-bottom: 8px;">Full Access to Scheduling Suite</li>
+            <li style="margin-bottom: 8px;">Multi-Platform AI Generation</li>
+            <li>Priority API Throughput</li>
+        </ul>
+    </div>
+
+    <p>Ready to automate your social media? Launch your dashboard now to get started.</p>
+    
+    <div class="button-container">
+        <a th:href="${dashboardUrl}" class="button">Launch Dashboard</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        If you have any questions, simply reply to this email or visit our <a href="#">Help Center</a>.
+    </p>
+</div>

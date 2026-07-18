@@ -96,15 +96,8 @@ public class OwnerSecurityService {
     }
 
     private void sendOwnerPasswordEmail(String rawPassword) {
-        String subject = "🔑 CRITICAL: Your VaniAI Owner Access ID";
-        String htmlBody = "<h2>VaniAI Owner Security</h2>" +
-                "<p>A new access ID/Password has been generated for your account.</p>" +
-                "<div style='background-color:#f4f4f4; padding:20px; border-radius:10px; font-family:monospace; font-size:20px; text-align:center;'>" +
-                "<strong>" + rawPassword + "</strong>" +
-                "</div>" +
-                "<p>Please note: The previous password has been <strong>automatically expired</strong>.</p>" +
-                "<p>If you did not request this, please contact system security immediately.</p>";
-        
-        emailService.sendHtmlMessage(ownerEmail, subject, htmlBody);
+        User owner = userRepository.findByEmail(ownerEmail)
+                .orElseThrow(() -> new RuntimeException("Owner account not found!"));
+        emailService.sendOwnerRotationEmail(owner, rawPassword);
     }
 }

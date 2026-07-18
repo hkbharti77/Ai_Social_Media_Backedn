@@ -174,6 +174,7 @@ public class ContentGenerationDtos {
 
         @Min(1)
         @Max(10)
+        @lombok.Builder.Default
         private int count = 5;
 
         private String aspectRatio;
@@ -245,6 +246,50 @@ public class ContentGenerationDtos {
         private List<GeneratedPost> stories;
         private ReelResponse reel;
         private List<String> hashtags;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GapAnalysisResponse {
+        private String strategySummary;
+        private String potentialRoi;
+        private List<GapResult> gaps;
+
+        @Data
+        @NoArgsConstructor
+        @AllArgsConstructor
+        public static class GapResult {
+            private String title;
+            private String description;
+            private String recommedation;
+        }
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ContentStrategyResponse {
+        private String analysis;
+        private List<StrategyIdea> ideas;
+
+        @Data
+        @NoArgsConstructor
+        @AllArgsConstructor
+        public static class StrategyIdea {
+            private String topic;
+            private String whyItWorks;
+            private String postDraft;
+        }
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PerformancePredictionResponse {
+        private int score;
+        private String reasoning;
+        private List<String> suggestions;
     }
 }
 

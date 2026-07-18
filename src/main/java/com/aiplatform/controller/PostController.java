@@ -6,6 +6,7 @@ import com.aiplatform.model.PostStatus;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.PostRepository;
 import com.aiplatform.service.AutoPostService;
+import com.aiplatform.service.EmailService;
 import com.aiplatform.service.EvergreenService;
 import com.aiplatform.util.SecurityUtils;
 import jakarta.validation.Valid;
@@ -37,6 +38,7 @@ public class PostController {
     private final PostRepository postRepository;
     private final AutoPostService autoPostService;
     private final EvergreenService evergreenService;
+    private final EmailService emailService;
 
     @GetMapping
     public ResponseEntity<List<Post>> getPosts() {
@@ -162,7 +164,18 @@ public class PostController {
         post.setScheduledAt(publishAt);
         post.setAutoScheduled(false); 
 
-        return ResponseEntity.ok(postRepository.save(post));
+        Post saved = postRepository.save(post);
+
+        // Send scheduling confirmation email
+        try {
+            String scheduledTime = publishAt.atZone(java.time.ZoneId.of("Asia/Kolkata"))
+                .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a"));
+            emailService.sendPostScheduledEmail(post.getUser(), saved, scheduledTime);
+        } catch (Exception e) {
+            logger.warn("⚠️ [PostController] Could not send approve-schedule email: {}", e.getMessage());
+        }
+
+        return ResponseEntity.ok(saved);
     }
 
     @PostMapping("/generate-draft")
@@ -214,6 +227,31 @@ public class PostController {
         return ResponseEntity.ok("Post deleted successfully");
     }
 
+    /**
+     * POST /api/v1/posts/bulk-delete
+     * Accepts a list of post IDs and deletes all that belong to the current user.
+     */
+    @PostMapping("/bulk-delete")
+    public ResponseEntity<Map<String, Object>> bulkDeletePosts(@RequestBody List<Long> ids) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No IDs provided"));
+        }
+
+        List<Post> toDelete = postRepository.findAllById(ids).stream()
+                .filter(p -> p.getUser().getId().equals(userId))
+                .toList();
+
+        int count = toDelete.size();
+        postRepository.deleteAll(toDelete);
+        logger.info("🗑️ [PostController] Bulk deleted {} posts for userId={}", count, userId);
+
+        return ResponseEntity.ok(Map.of(
+            "deleted", count,
+            "message", count + " post(s) deleted successfully"
+        ));
+    }
+
     @PostMapping("/{id}/schedule")
     public ResponseEntity<Post> schedulePost(@PathVariable Long id, @RequestParam String scheduledAt) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -227,7 +265,21 @@ public class PostController {
         post.setScheduledAt(parseDate(scheduledAt));
         post.setStatus(PostStatus.SCHEDULED);
         
-        return ResponseEntity.ok(postRepository.save(post));
+        Post saved = postRepository.save(post);
+
+        // Send scheduling confirmation email
+        try {
+            User postUser = post.getUser();
+            String scheduledTime = saved.getScheduledAt() != null
+                ? saved.getScheduledAt().atZone(java.time.ZoneId.of("Asia/Kolkata"))
+                    .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a"))
+                : "N/A";
+            emailService.sendPostScheduledEmail(postUser, saved, scheduledTime);
+        } catch (Exception e) {
+            logger.warn("⚠️ [PostController] Could not send schedule confirmation email: {}", e.getMessage());
+        }
+
+        return ResponseEntity.ok(saved);
     }
 
     @PostMapping("/{id}/recycle")

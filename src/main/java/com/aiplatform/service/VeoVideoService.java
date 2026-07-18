@@ -1,5 +1,6 @@
 package com.aiplatform.service;
 
+import com.aiplatform.dto.AiRequest;
 import com.aiplatform.dto.ContentGenerationDtos.*;
 import com.aiplatform.exception.VeoGenerationException;
 import com.aiplatform.exception.VeoRateLimitException;
@@ -14,12 +15,6 @@ import org.slf4j.LoggerFactory;
 import com.aiplatform.model.AiUsageLog;
 import com.aiplatform.repository.AiUsageLogRepository;
 import com.aiplatform.repository.UserRepository;
-import org.springframework.ai.chat.metadata.Usage;
-import org.springframework.ai.chat.model.ChatResponse;
-import java.time.LocalDateTime;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -28,6 +23,7 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.ByteArrayInputStream;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -40,7 +36,7 @@ public class VeoVideoService {
 
     private final RestTemplate restTemplate;
     private final S3Service s3Service;
-    private final ChatClient chatClient;
+    private final AiOrchestrator aiOrchestrator;
     private final SubscriptionService subscriptionService;
     private final ObjectMapper objectMapper;
     private final AiUsageLogRepository aiUsageLogRepository;
@@ -98,7 +94,7 @@ public class VeoVideoService {
                     .build();
 
             // Audit the video generation
-            logUsage(userId, veoModel.getActualApiModelId(), "VEO_GENERATION", null, enrichedPrompt, videoUrl);
+            logUsage(userId, veoModel.getActualApiModelId(), "VEO_GENERATION", enrichedPrompt, videoUrl);
             
             return response;
         } catch (Exception e) {
@@ -274,42 +270,24 @@ public class VeoVideoService {
     }
 
     private ReelResponse generateReelContent(String prompt, BusinessProfile profile, Long userId) {
-        String template = """
-                You are a social media expert. Based on this prompt: "%s"
-                For business: %s (Niche: %s, Audience: %s)
-                Generate a catchy caption, hashtags, a short video script, and music mood.
-                Return ONLY a JSON object matching this structure:
-                {
-                  "caption": "string",
-                  "hashtags": ["string", "string"],
-                  "videoScript": "string (NOT an array)",
-                  "audioSuggestion": "string"
-                }
-                """;
-        
-        String chatPrompt = String.format(template, prompt, 
-                profile.getBusinessName(), profile.getNiche(), profile.getTargetAudience());
+        AiRequest aiRequest = AiRequest.builder()
+                .promptPath("content/reel_metadata")
+                .templateParams(Map.of(
+                        "prompt", prompt,
+                        "businessName", profile.getBusinessName() != null ? profile.getBusinessName() : "Unknown",
+                        "niche", profile.getNiche() != null ? profile.getNiche() : "Unknown",
+                        "audience", profile.getTargetAudience() != null ? profile.getTargetAudience() : "General"
+                ))
+                .userId(userId)
+                .modelId("gemini-1.5-flash")
+                .actionType("REEL_METADATA")
+                .userCommand(prompt)
+                .build();
         
         try {
-            ChatResponse chatResponse = chatClient.prompt(new Prompt(chatPrompt)).call().chatResponse();
-            String response = chatResponse.getResult().getOutput().getText();
-            Usage usage = chatResponse.getMetadata().getUsage();
-            
-            logger.debug("LLM Metadata Response: {}", response);
-            
-            // Basic JSON extraction if LLM wraps it in markdown
-            if (response.contains("```json")) {
-                response = response.substring(response.indexOf("```json") + 7, response.lastIndexOf("```")).trim();
-            } else if (response.contains("```")) {
-                response = response.substring(response.indexOf("```") + 3, response.lastIndexOf("```")).trim();
-            }
-
-            // Audit metadata generation
-            logUsage(userId, "gemini-1.5-flash", "REEL_METADATA", usage, chatPrompt, null);
-            
-            return objectMapper.readValue(response, ReelResponse.class);
+            return aiOrchestrator.generateJson(aiRequest, ReelResponse.class);
         } catch (Exception e) {
-            logger.error("Failed to generate reel content. Error: {}. Check if LLM returned an array for videoScript.", e.getMessage());
+            logger.error("Failed to generate reel content. Error: {}", e.getMessage());
             ReelResponse fallback = new ReelResponse();
             fallback.setCaption("Check out our latest video!");
             fallback.setHashtags(java.util.List.of("trending", "ai"));
@@ -318,16 +296,16 @@ public class VeoVideoService {
         }
     }
 
-    private void logUsage(Long userId, String modelId, String actionType, Usage usage, String prompt, String resultUrl) {
+    private void logUsage(Long userId, String modelId, String actionType, String prompt, String resultUrl) {
         try {
             userRepository.findById(userId).ifPresent(user -> {
                 AiUsageLog log = AiUsageLog.builder()
                         .user(user)
                         .modelId(modelId)
                         .actionType(actionType)
-                        .promptTokens(usage != null ? (int) usage.getPromptTokens() : 0)
-                        .completionTokens(usage != null ? (int) usage.getCompletionTokens() : 0)
-                        .totalTokens(usage != null ? (int) usage.getTotalTokens() : 0)
+                        .promptTokens(0)
+                        .completionTokens(0)
+                        .totalTokens(0)
                         .prompt(prompt)
                         .resultUrl(resultUrl)
                         .featureName("Reel Generator")

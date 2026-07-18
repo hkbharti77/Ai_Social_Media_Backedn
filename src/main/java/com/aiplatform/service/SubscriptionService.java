@@ -2,6 +2,7 @@ package com.aiplatform.service;
 
 import com.aiplatform.exception.InsufficientCreditsException;
 import com.aiplatform.model.CreditUsage;
+import com.aiplatform.service.EmailService;
 
 import com.aiplatform.model.AiModelSelection;
 import com.aiplatform.model.SubscriptionTier;
@@ -22,6 +23,9 @@ public class SubscriptionService {
 
     @Autowired
     private CreditUsageRepository creditUsageRepository;
+
+    @Autowired
+    private EmailService emailService;
 
     @Transactional
     public void deductFixedCredits(Long userId, double cost, String purpose) {
@@ -141,6 +145,22 @@ public class SubscriptionService {
         user.setDailyCreditsUsed(user.getDailyCreditsUsed() + totalCost);
         user.setLastGenerationAt(now);
         userRepository.save(user);
+
+        // 8a. Credit warning check (50% and 80% thresholds)
+        double totalAllocation = tier.getMonthlyLimit();
+        if (totalAllocation > 0) {
+            double remaining = user.getMonthlyCredits();
+            double used = totalAllocation - remaining;
+            int percentUsed = (int) Math.round((used / totalAllocation) * 100);
+            // Fire at exactly crossing 50% or 80% (within this deduction)
+            double prevRemaining = remaining + totalCost;
+            double prevPercent = ((totalAllocation - prevRemaining) / totalAllocation) * 100;
+            if ((prevPercent < 80 && percentUsed >= 80) || (prevPercent < 50 && percentUsed >= 50 && percentUsed < 80)) {
+                try {
+                    emailService.sendCreditWarningEmail(user, remaining, totalAllocation, percentUsed);
+                } catch (Exception ignored) {}
+            }
+        }
 
         // 8. Log History
         creditUsageRepository.save(CreditUsage.builder()

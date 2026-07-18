@@ -1,0 +1,20 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Learner!</h2>
+    <p>Your GyanVaniAi credit balance is critically low. To maintain your scheduled generations and automation without interruption, please top up your account.</p>
+    
+    <div style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 16px; padding: 40px; margin: 32px 0; text-align: center;">
+        <p style="color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 8px 0;">Remaining Capacity</p>
+        <h1 style="color: #ef4444; font-size: 48px; font-weight: 800; margin: 0;" th:text="${remainingCredits}">0</h1>
+        <p style="color: #ef4444; font-size: 11px; font-weight: 700; margin: 8px 0 0 0;">CREDITS REMAINING</p>
+    </div>
+
+    <p>Upgrade to a higher plan or purchase additional credits to unlock priority processing and expanded access to all AI models.</p>
+    
+    <div class="button-container">
+        <a th:href="${pricingUrl}" class="button" style="background-color: #ef4444;">Add Credits Now</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        Don't let your content strategy stall. Stay ahead of the curve with GyanVaniAi.
+    </p>
+</div>

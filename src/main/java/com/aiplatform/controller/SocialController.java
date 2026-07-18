@@ -1,12 +1,14 @@
 package com.aiplatform.controller;
 
 import com.aiplatform.dto.SocialTokenRequest;
+import com.aiplatform.dto.XTokenRequest;
 import com.aiplatform.model.SocialAccount;
 import com.aiplatform.model.User;
 import com.aiplatform.repository.UserRepository;
 import com.aiplatform.security.JwtUtils;
 import com.aiplatform.service.SocialService;
 import com.aiplatform.util.SecurityUtils;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -165,5 +167,20 @@ public class SocialController {
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
         socialService.deleteAccount(id, user);
         return ResponseEntity.ok("Account disconnected successfully");
+    }
+
+    /**
+     * Manually connect an X (Twitter) account using tokens from the X Developer Portal.
+     * Use this when the standard OAuth callback flow is not available.
+     *
+     * POST /api/v1/social/connect/x/manual
+     * Body: { "accessToken": "...", "refreshToken": "..." }
+     */
+    @PostMapping("/connect/x/manual")
+    public ResponseEntity<String> connectXManually(@Valid @RequestBody XTokenRequest request) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        socialService.connectXManually(request.getAccessToken(), request.getRefreshToken(), user);
+        return ResponseEntity.ok("X account connected successfully");
     }
 }

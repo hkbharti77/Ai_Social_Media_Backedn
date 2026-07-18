@@ -6,11 +6,17 @@ import com.aiplatform.model.User;
 import com.aiplatform.repository.BusinessProfileRepository;
 import com.aiplatform.repository.UserRepository;
 import com.aiplatform.service.AiBestTimeService;
-import com.aiplatform.service.AiContentService;
+import com.aiplatform.service.AiEngagementService;
+import com.aiplatform.service.EmailService;
 import com.aiplatform.security.UserDetailsImpl;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -30,7 +36,13 @@ public class ProfileController {
     private AiBestTimeService aiBestTimeService;
 
     @Autowired
-    private AiContentService aiContentService;
+    private AiEngagementService aiEngagementService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EmailService emailService;
 
     @GetMapping("/all")
     public ResponseEntity<java.util.List<BusinessProfile>> getAllProfiles() {
@@ -144,7 +156,7 @@ public class ProfileController {
 
         // Call AI Service to analyze (Need to inject AiContentService or a dedicated VoiceService)
         // For simplicity, let's assume we add this method to AiContentService
-        String dna = aiContentService.analyzeBrandVoice(bp.getBrandVoiceSamples(), user.getId());
+        String dna = aiEngagementService.analyzeBrandVoice(bp.getBrandVoiceSamples(), user.getId());
         bp.setBrandStyleDna(dna);
         businessProfileRepository.save(bp);
 
@@ -161,6 +173,44 @@ public class ProfileController {
                 .orElseThrow(() -> new RuntimeException("Profile not found"));
         
         return ResponseEntity.ok(aiBestTimeService.suggestTimes(bp));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, String>> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findById(userDetails.getId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify old password
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Current password is incorrect."));
+        }
+
+        // Prevent same password
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "New password must be different from the current password."));
+        }
+
+        // Update password
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // Send confirmation email (non-blocking)
+        try {
+            emailService.sendPasswordResetSuccessEmail(user);
+        } catch (Exception ignored) {}
+
+        return ResponseEntity.ok(Map.of("message", "Password updated successfully."));
+    }
+
+    @Data
+    public static class ChangePasswordRequest {
+        @NotBlank(message = "Current password is required")
+        private String oldPassword;
+
+        @NotBlank(message = "New password is required")
+        @Size(min = 8, message = "New password must be at least 8 characters")
+        private String newPassword;
     }
 
     private String generateReferralCode(String email) {

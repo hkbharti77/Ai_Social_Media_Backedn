@@ -1,0 +1,31 @@
+<div th:fragment="content">
+    <h2 th:text="'Namaste ' + ${name} + '!'">Namaste Creator!</h2>
+    <p th:text="${warningMsg}">Warning Message</p>
+    
+    <div th:style="'background-color:' + (${isCritical} ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)') + '; border: 1px solid ' + (${isCritical} ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)') + '; border-radius: 16px; padding: 40px; margin: 32px 0; text-align: center;'">
+        <p th:style="'color:' + (${isCritical} ? '#ef4444' : '#ff66b2') + '; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 8px 0;'" th:text="${warningLabel}">CREDIT STATUS</p>
+        <h1 th:style="'color:' + (${isCritical} ? '#ef4444' : '#ff66b2') + '; font-size: 48px; font-weight: 800; margin: 0;'" th:text="${percentUsed} + '%'">0%</h1>
+        <p style="color: #000000; font-size: 11px; font-weight: 700; margin: 8px 0 0 0;">CREDITS USED</p>
+    </div>
+
+    <div style="background-color: rgba(30, 36, 51, 0.5); border: 1px solid #000000; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tr>
+                <td style="color: #000000; font-size: 13px; padding-bottom: 8px;">Credits Remaining:</td>
+                <td align="right" th:style="'color:' + (${isCritical} ? '#ef4444' : '#000000') + '; font-size: 13px; font-weight: 700; padding-bottom: 8px;'" th:text="${creditsRemaining}">0</td>
+            </tr>
+            <tr>
+                <td style="color: #000000; font-size: 13px;">Monthly Allocation:</td>
+                <td align="right" style="color: #000000; font-size: 13px; font-weight: 600;" th:text="${totalCredits}">0</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="button-container">
+        <a th:href="${pricingUrl}" class="button" th:style="'background-color:' + (${isCritical} ? '#ef4444' : '#3399ff') + ';'">⚡ Upgrade Plan</a>
+    </div>
+
+    <p style="color: #000000; font-size: 14px; margin-top: 32px;">
+        Don't let your AI generations stop. High-volume users find our <strong>PRO</strong> plan provides the best value.
+    </p>
+</div>

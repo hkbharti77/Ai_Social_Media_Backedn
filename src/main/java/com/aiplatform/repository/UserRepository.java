@@ -12,8 +12,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     Boolean existsByEmail(String email);
     List<User> findAllBySubscriptionTierNotAndSubscriptionExpiresAtBefore(SubscriptionTier tier, LocalDateTime now);
+    List<User> findAllBySubscriptionTierNotAndSubscriptionExpiresAtAfter(SubscriptionTier tier, LocalDateTime now);
     Optional<User> findByVerificationToken(String token);
     Optional<User> findByReferralCode(String referralCode);
+    Optional<User> findByPasswordResetToken(String token);
     Boolean existsByReferralCode(String referralCode);
 
     Long countByLastLoginAtAfter(LocalDateTime date);

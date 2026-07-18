@@ -3,8 +3,10 @@ package com.aiplatform.service;
 import com.aiplatform.model.Post;
 import com.aiplatform.model.PostStatus;
 import com.aiplatform.model.SocialAccount;
+import com.aiplatform.model.User;
 import com.aiplatform.repository.PostRepository;
 import com.aiplatform.repository.SocialAccountRepository;
+import com.aiplatform.repository.UserRepository;
 import com.aiplatform.security.EncryptionUtils;
 import com.aiplatform.dto.ContentGenerationDtos.CarouselResponse;
 import com.aiplatform.dto.ContentGenerationDtos.CarouselSlide;
@@ -52,6 +54,9 @@ public class PublisherService {
     private SocialAccountRepository socialAccountRepository;
 
     @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private EncryptionUtils encryptionUtils;
     
     @Autowired
@@ -62,6 +67,9 @@ public class PublisherService {
 
     @Autowired
     private VideoTranscodeService videoTranscodeService;
+
+    @Autowired
+    private EmailService emailService;
 
     @Autowired
     private RestTemplate restTemplate;
@@ -93,6 +101,8 @@ public class PublisherService {
 
     @Async
     public void publishPost(Post post) {
+        // Eagerly load user before async thread loses Hibernate session
+        final User postUser = userRepository.findById(post.getUser().getId()).orElse(null);
         try {
             List<SocialAccount> accounts = socialAccountRepository.findByUser(post.getUser());
             
@@ -173,6 +183,19 @@ public class PublisherService {
             post.setFailureReason(e.getMessage());
         } finally {
             postRepository.save(post);
+            // Send email notification (non-blocking, best-effort)
+            try {
+                if (postUser != null && postUser.getEmail() != null) {
+                    String platform = post.getPlatform() != null ? post.getPlatform() : "UNKNOWN";
+                    if (post.getStatus() == PostStatus.PUBLISHED) {
+                        emailService.sendPostPublishedEmail(postUser, post, platform);
+                    } else if (post.getStatus() == PostStatus.FAILED) {
+                        emailService.sendPostFailedEmail(postUser, post, platform, post.getFailureReason());
+                    }
+                }
+            } catch (Exception emailEx) {
+                logger.warn("⚠️ [Publisher] Could not send post notification email: {}", emailEx.getMessage());
+            }
         }
     }
 

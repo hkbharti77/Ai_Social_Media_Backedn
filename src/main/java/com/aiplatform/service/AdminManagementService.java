@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -40,6 +41,7 @@ public class AdminManagementService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final MicrositeLinkRepository micrositeLinkRepository;
     private final CommentRepository commentRepository;
+    private final PasswordEncoder passwordEncoder;
 
     // ==================== Helper Methods ====================
 
@@ -303,6 +305,39 @@ public class AdminManagementService {
                 .build();
     }
 
+    public List<UserSummary> getAllUsersSummaries() {
+        return userRepository.findAll().stream()
+                .map(user -> UserSummary.builder()
+                        .userId(user.getId())
+                        .email(user.getEmail())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void resetUserPassword(Long userId) {
+        User user = getUserOrThrow(userId);
+        rejectIfOwner(user, "reset password for");
+
+        String newPassword = generateRandomPassword();
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        log.info("Admin reset password for user: {}", user.getEmail());
+        
+        emailService.sendManualPasswordResetEmail(user, newPassword);
+    }
+
+    private String generateRandomPassword() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
+        StringBuilder sb = new StringBuilder();
+        Random random = new Random();
+        for (int i = 0; i < 10; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
+    }
+
     // ==================== Fraud and Security ====================
 
     public Page<FraudFlaggedUserDto> getFraudFlaggedUsers(Pageable pageable) {
@@ -559,11 +594,18 @@ public class AdminManagementService {
     public BroadcastEmailResponse broadcastEmail(BroadcastEmailRequest request) {
         validateBroadcastRequest(request);
         
-        List<User> recipients;
+        List<User> recipients = new ArrayList<>();
         
-        if ("ALL".equalsIgnoreCase(request.getTargetTier())) {
+        if ("SPECIFIC".equalsIgnoreCase(request.getTargetTier())) {
+            if (request.getTargetEmail() == null || request.getTargetEmail().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target email is required for SPECIFIC tier");
+            }
+            User user = userRepository.findByEmail(request.getTargetEmail())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found: " + request.getTargetEmail()));
+            recipients.add(user);
+        } else if ("ALL".equalsIgnoreCase(request.getTargetTier())) {
             recipients = userRepository.findAll();
-        } else {
+        } else if (request.getTargetTier() != null) {
             try {
                 SubscriptionTier tier = SubscriptionTier.valueOf(request.getTargetTier().toUpperCase());
                 recipients = userRepository.findBySubscriptionTier(tier);
@@ -571,13 +613,12 @@ public class AdminManagementService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                         "Invalid target tier: " + request.getTargetTier());
             }
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target tier or target email is required");
         }
         
-        log.info("Broadcasting email to {} recipients (tier: {})", 
-                recipients.size(), request.getTargetTier());
-        
-        // Wrap the HTML content in the professional email template
-        String formattedHtml = emailTemplateUtils.getBroadcastEmailHtml(request.getSubject(), request.getHtmlBody());
+        log.info("Broadcasting email to {} recipients (tier: {}, specific: {})", 
+                recipients.size(), request.getTargetTier(), request.getTargetEmail());
         
         int successCount = 0;
         int failedCount = 0;
@@ -592,7 +633,7 @@ public class AdminManagementService {
             }
             
             try {
-                emailService.sendHtmlMessage(user.getEmail(), request.getSubject(), formattedHtml);
+                emailService.sendBroadcastEmail(user.getEmail(), request.getSubject(), request.getHtmlBody());
                 successCount++;
             } catch (Exception e) {
                 log.error("Failed to send broadcast email to {}: {}", user.getEmail(), e.getMessage());
@@ -624,6 +665,10 @@ public class AdminManagementService {
         }
         if (request.getHtmlBody() == null || request.getHtmlBody().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email body must not be empty");
+        }
+        if ((request.getTargetTier() == null || request.getTargetTier().isBlank()) && 
+            (request.getTargetEmail() == null || request.getTargetEmail().isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Either targetTier or targetEmail must be specified");
         }
     }
 

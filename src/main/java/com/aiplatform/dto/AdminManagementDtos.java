@@ -194,8 +194,9 @@ public class AdminManagementDtos {
         @NotBlank
         private String htmlBody;
         
-        @NotBlank
-        private String targetTier; // "ALL" | SubscriptionTier name
+        private String targetTier;  // "ALL" | SubscriptionTier name | "SPECIFIC"
+        
+        private String targetEmail; // Used if targetTier is "SPECIFIC"
     }
 
     @Data
