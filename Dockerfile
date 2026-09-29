@@ -12,8 +12,8 @@ WORKDIR /app
 # Copy the built jar from the builder stage
 COPY --from=builder /app/target/*.jar app.jar
 
-# Expose the application port
-EXPOSE 8080
+# Expose the application port (Hugging Face default is 7860)
+EXPOSE 7860
 
 # Run the application using the shell-form of ENTRYPOINT for environment variable expansion
-ENTRYPOINT java -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xss512k -Dserver.port=${PORT:-8080} -jar app.jar
+ENTRYPOINT java -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xss512k -Dserver.port=${PORT:-7860} -jar app.jar

@@ -66,6 +66,8 @@ spring:
     veo:
       model: veo-3.1-fast-generate-preview  # Changed from Standard to Fast (74% cost reduction)
       credit-cost: 20.0
+    huggingface:
+      api-key: ${HUGGINGFACE_API_KEY:${HF_TOKEN:}}
 
 management:
   endpoints:
