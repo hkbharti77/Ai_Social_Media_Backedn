@@ -23,19 +23,27 @@ public class S3Config {
 
     @Bean
     public S3Client s3Client() {
+        String cleanAccessKey = accessKey != null ? accessKey.trim() : "";
+        String cleanSecretKey = secretKey != null ? secretKey.trim() : "";
+        String cleanRegion = region != null ? region.trim() : "ap-south-1";
+
         return S3Client.builder()
-                .region(Region.of(region))
+                .region(Region.of(cleanRegion))
                 .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
+                        AwsBasicCredentials.create(cleanAccessKey, cleanSecretKey)))
                 .build();
     }
 
     @Bean
     public S3Presigner s3Presigner() {
+        String cleanAccessKey = accessKey != null ? accessKey.trim() : "";
+        String cleanSecretKey = secretKey != null ? secretKey.trim() : "";
+        String cleanRegion = region != null ? region.trim() : "ap-south-1";
+
         return S3Presigner.builder()
-                .region(Region.of(region))
+                .region(Region.of(cleanRegion))
                 .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
+                        AwsBasicCredentials.create(cleanAccessKey, cleanSecretKey)))
                 .build();
     }
 }

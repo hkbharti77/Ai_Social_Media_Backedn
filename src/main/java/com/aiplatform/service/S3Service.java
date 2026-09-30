@@ -45,21 +45,26 @@ public class S3Service {
      * Lists all files for a specific user in the social_media/{userId} folder.
      */
     public List<Map<String, String>> listAllFiles(Long userId) {
-        String userPrefix = S3_FOLDER + userId + "/";
-        ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
-                .bucket(bucketName)
-                .prefix(userPrefix)
-                .build();
+        try {
+            String userPrefix = S3_FOLDER + userId + "/";
+            ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
+                    .bucket(bucketName)
+                    .prefix(userPrefix)
+                    .build();
 
-        ListObjectsV2Response response = s3Client.listObjectsV2(listRequest);
+            ListObjectsV2Response response = s3Client.listObjectsV2(listRequest);
 
-        return response.contents().stream()
-                .filter(obj -> obj.size() > 0) // Skip folder placeholders
-                .map(obj -> Map.of(
-                    "url", getObjectUrl(obj.key()),
-                    "downloadUrl", generateDownloadUrl(obj.key())
-                ))
-                .collect(Collectors.toList());
+            return response.contents().stream()
+                    .filter(obj -> obj.size() > 0) // Skip folder placeholders
+                    .map(obj -> Map.of(
+                        "url", getObjectUrl(obj.key()),
+                        "downloadUrl", generateDownloadUrl(obj.key())
+                    ))
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.error("Failed to list S3 files for user {}: {}", userId, e.getMessage());
+            return List.of();
+        }
     }
 
     /**

@@ -51,6 +51,33 @@ public class PostController {
         return ResponseEntity.ok(posts);
     }
 
+    /**
+     * GET /api/v1/posts/calendar?from=2026-09-01&to=2026-09-30
+     * Returns posts whose scheduledAt or publishedAt falls within [from, to].
+     * Includes all statuses. Max range 90 days enforced server-side.
+     */
+    @GetMapping("/calendar")
+    public ResponseEntity<List<Post>> getCalendarPosts(
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate to) {
+        User user = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+
+        // Clamp range to 90 days max
+        if (java.time.temporal.ChronoUnit.DAYS.between(from, to) > 90) {
+            to = from.plusDays(90);
+        }
+
+        List<Post> posts = postRepository.findByUserAndDateRange(
+                user,
+                from.atStartOfDay(),
+                to.plusDays(1).atStartOfDay());
+
+        logger.info("📅 [PostController] Calendar fetch: {} posts for user {} [{} → {}]",
+                posts.size(), user.getEmail(), from, to);
+        return ResponseEntity.ok(posts);
+    }
+
     @GetMapping("/drafts")
     public ResponseEntity<List<Post>> getDraftPosts() {
         User user = SecurityUtils.getCurrentUser()

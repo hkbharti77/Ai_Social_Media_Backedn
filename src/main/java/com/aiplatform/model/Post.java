@@ -126,6 +126,27 @@ public class Post {
     @Column(name = "last_recycled_at")
     private LocalDateTime lastRecycledAt;
 
+    // ─── Engagement Fields (synced from social platform APIs) ─────────────────
+
+    @Builder.Default
+    @Column(name = "likes")
+    private Long likes = 0L;
+
+    @Builder.Default
+    @Column(name = "comments_count")
+    private Long commentsCount = 0L;
+
+    @Builder.Default
+    @Column(name = "shares")
+    private Long shares = 0L;
+
+    @Builder.Default
+    @Column(name = "reach")
+    private Long reach = 0L;
+
+    @Column(name = "engagement_synced_at")
+    private LocalDateTime engagementSyncedAt;
+
     @JsonIgnore
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Comment> comments;

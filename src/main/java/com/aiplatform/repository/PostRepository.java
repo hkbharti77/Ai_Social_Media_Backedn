@@ -72,4 +72,25 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     @Query("SELECT COUNT(p) FROM Post p WHERE p.status = 'PUBLISHED' AND p.publishedAt >= :startOfDay")
     Long countPublishedFrom(@Param("startOfDay") LocalDateTime startOfDay);
+
+    // ─── Calendar Range Query ──────────────────────────────────────────────────
+
+    /**
+     * Returns all posts for a user whose scheduledAt OR publishedAt falls within [from, to).
+     * Used by the calendar view to fetch only the posts visible in the current month/week/day.
+     * Max range enforced at controller level (90 days).
+     */
+    @Query("""
+        SELECT p FROM Post p
+        WHERE p.user = :user
+        AND (
+            (p.scheduledAt >= :from AND p.scheduledAt < :to)
+            OR (p.publishedAt >= :from AND p.publishedAt < :to)
+        )
+        ORDER BY COALESCE(p.scheduledAt, p.publishedAt) ASC
+    """)
+    List<Post> findByUserAndDateRange(
+            @Param("user") User user,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
 }

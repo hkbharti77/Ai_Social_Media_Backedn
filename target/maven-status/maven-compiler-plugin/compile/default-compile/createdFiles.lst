@@ -1,4 +1,5 @@
 com\aiplatform\model\User.class
+com\aiplatform\dto\AnalyticsDtos$CreditByAction.class
 com\aiplatform\dto\AdminAnalyticsDtos$ModelUsageStats.class
 com\aiplatform\dto\ContentGenerationDtos$MemeRequest.class
 com\aiplatform\controller\WebhookController.class
@@ -6,6 +7,7 @@ com\aiplatform\service\FacebookReviewService.class
 com\aiplatform\dto\SchedulingDtos.class
 com\aiplatform\service\MicrositeService.class
 com\aiplatform\config\SecurityConfig.class
+com\aiplatform\service\AnalyticsService.class
 com\aiplatform\dto\StandardErrorResponse.class
 com\aiplatform\repository\RefreshTokenRepository.class
 com\aiplatform\dto\AdminManagementDtos$BroadcastEmailResponse.class
@@ -43,6 +45,7 @@ com\aiplatform\dto\AdminManagementDtos$SubscriptionChangeRequest$SubscriptionCha
 com\aiplatform\model\AiModelSelection.class
 com\aiplatform\config\TracingConfig.class
 com\aiplatform\dto\AdminManagementDtos$CreditStatsResponse.class
+com\aiplatform\dto\AnalyticsDtos$HeatmapDayDto.class
 com\aiplatform\scheduler\PostSchedulerTask.class
 com\aiplatform\controller\AuthController.class
 com\aiplatform\exception\VeoGenerationException.class
@@ -50,6 +53,7 @@ com\aiplatform\service\ModelRegistry.class
 com\aiplatform\service\EncryptionMigrationService.class
 com\aiplatform\service\AiBestTimeService.class
 com\aiplatform\service\RefreshTokenService.class
+com\aiplatform\dto\AnalyticsDtos$ContentTypeBreakdownDto.class
 com\aiplatform\model\SupportTicket.class
 com\aiplatform\dto\RoutingContext.class
 com\aiplatform\model\PricingTier.class
@@ -93,6 +97,7 @@ com\aiplatform\service\VideoLimitService.class
 com\aiplatform\dto\AdminManagementDtos$UserActionResponse$UserActionResponseBuilder.class
 com\aiplatform\dto\SupportTicketDtos$SupportTicketRequest.class
 com\aiplatform\dto\ContentGenerationDtos$PerformancePredictionResponse.class
+com\aiplatform\dto\AnalyticsDtos$PlatformBreakdownDto.class
 com\aiplatform\security\RateLimitingFilter.class
 com\aiplatform\strategy\CapabilityRoutingStrategy.class
 com\aiplatform\dto\ContentGenerationDtos$CampaignGenerationRequest.class
@@ -123,6 +128,7 @@ com\aiplatform\dto\AuthDtos$TokenRefreshResponse.class
 com\aiplatform\exception\GlobalExceptionHandler.class
 com\aiplatform\dto\AdminManagementDtos$CreditAdjustmentRequest$CreditAdjustmentRequestBuilder.class
 com\aiplatform\dto\AdminAnalyticsDtos$AdminDashboardStats.class
+com\aiplatform\controller\AnalyticsController.class
 com\aiplatform\model\PricingTier$PricingTierBuilder.class
 com\aiplatform\dto\AdminManagementDtos$TopCreditUser$TopCreditUserBuilder.class
 com\aiplatform\service\VideoLimitService$1.class
@@ -143,6 +149,7 @@ com\aiplatform\service\FacebookDataDeletionService.class
 com\aiplatform\service\InstagramInsightsService.class
 com\aiplatform\service\LoginSecurityService.class
 com\aiplatform\service\AiContentService.class
+com\aiplatform\dto\AnalyticsDtos$CreditUsageTimelineDto.class
 com\aiplatform\model\VeoModelSelection.class
 com\aiplatform\dto\ContentGenerationDtos$GapAnalysisResponse.class
 com\aiplatform\service\FraudDetectionService.class
@@ -207,6 +214,7 @@ com\aiplatform\service\AiProviderHealthService$HealthWindow.class
 com\aiplatform\dto\SchedulingDtos$SuggestedTimes.class
 com\aiplatform\model\BusinessProfile.class
 com\aiplatform\model\AiJob$JobStatus.class
+com\aiplatform\dto\AnalyticsDtos$DailyCredit.class
 com\aiplatform\service\BusinessProfileService.class
 com\aiplatform\exception\TokenRefreshException.class
 com\aiplatform\dto\AdminManagementDtos$TopCreditUser.class
@@ -242,6 +250,7 @@ com\aiplatform\dto\AdminManagementDtos$FraudFlagResponse$FraudFlagResponseBuilde
 com\aiplatform\service\AiRateLimiterService.class
 com\aiplatform\model\LoginEvent$LoginEventBuilder.class
 com\aiplatform\exception\InsufficientCreditsException.class
+com\aiplatform\dto\AnalyticsDtos$ContentTypeSlice.class
 com\aiplatform\dto\AdminManagementDtos$UserSummary.class
 com\aiplatform\service\ProviderRouter.class
 com\aiplatform\dto\AdminManagementDtos$DuplicateIpGroup.class
@@ -253,6 +262,7 @@ com\aiplatform\model\BrandVoiceMode.class
 com\aiplatform\service\PaymentService.class
 com\aiplatform\security\RateLimitingService.class
 com\aiplatform\service\AiBillingService.class
+com\aiplatform\dto\AnalyticsDtos$PostPerformanceDto.class
 com\aiplatform\controller\AiJobController.class
 com\aiplatform\dto\ContentGenerationDtos$GapAnalysisResult.class
 com\aiplatform\repository\SocialAccountRepository.class
@@ -264,6 +274,7 @@ com\aiplatform\model\AiUsageLog.class
 com\aiplatform\controller\AdminManagementController.class
 com\aiplatform\controller\PostController.class
 com\aiplatform\service\VideoCreditService$1.class
+com\aiplatform\dto\AnalyticsDtos.class
 com\aiplatform\dto\AdminManagementDtos$BroadcastEmailRequest$BroadcastEmailRequestBuilder.class
 com\aiplatform\model\Post$PostBuilder.class
 com\aiplatform\dto\AdminManagementDtos$BroadcastEmailRequest.class
@@ -272,6 +283,7 @@ com\aiplatform\dto\ContentGenerationDtos$ContentStrategyResponse.class
 com\aiplatform\model\RefreshToken$RefreshTokenBuilder.class
 com\aiplatform\dto\MicrositeDtos$LinkCreateRequest.class
 com\aiplatform\model\CreditUsage$CreditUsageBuilder.class
+com\aiplatform\dto\AnalyticsDtos$OverviewMetrics.class
 com\aiplatform\dto\AuthDtos.class
 com\aiplatform\model\Comment$CommentBuilder.class
 com\aiplatform\service\AiOrchestrator.class

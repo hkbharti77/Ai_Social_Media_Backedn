@@ -19,9 +19,8 @@ public class AiPlatformApplication {
 				.load();
 		
 		dotenv.entries().forEach(entry -> {
-			if (System.getProperty(entry.getKey()) == null) {
-				System.setProperty(entry.getKey(), entry.getValue());
-			}
+			String val = entry.getValue() != null ? entry.getValue().trim() : "";
+			System.setProperty(entry.getKey(), val);
 		});
 
 		SpringApplication.run(AiPlatformApplication.class, args);
