@@ -44,17 +44,17 @@ An enterprise-grade, high-performance Spring Boot backend powering the AI Social
 
 ```mermaid
 graph TB
-    subgraph Client Layer
+    subgraph ClientLayer["Client Layer"]
         FE[React TypeScript Frontend]
         Mobile[Mobile / API Clients]
     end
 
-    subgraph Security & Edge Layer
+    subgraph EdgeLayer["Security & Edge Layer"]
         SecurityFilter[Spring Security + JWT Filter]
         RateLimiter[Bucket4j / Redis Rate Limiter]
     end
 
-    subgraph Controller Layer
+    subgraph ControllerLayer["Controller Layer"]
         AuthController[AuthController]
         AiController[AiController]
         PostController[PostController]
@@ -63,7 +63,7 @@ graph TB
         AdminController[AdminManagementController]
     end
 
-    subgraph Service Layer
+    subgraph ServiceLayer["Service Layer"]
         AiOrchestrator[AiOrchestrator / PromptEngine]
         PublisherService[PublisherService / AutoPostService]
         SocialService[SocialService]
@@ -72,7 +72,7 @@ graph TB
         AdminService[AdminManagementService / FraudDetection]
     end
 
-    subgraph Persistence & External Integrations
+    subgraph PersistenceLayer["Persistence & External Integrations"]
         DB[(PostgreSQL Database)]
         Redis[(Redis Cache / Rate Limit)]
         S3[AWS S3 Bucket]
@@ -84,21 +84,36 @@ graph TB
     FE --> SecurityFilter
     Mobile --> SecurityFilter
     SecurityFilter --> RateLimiter
-    RateLimiter --> AuthController & AiController & PostController & SocialController & PaymentController & AdminController
+    RateLimiter --> AuthController
+    RateLimiter --> AiController
+    RateLimiter --> PostController
+    RateLimiter --> SocialController
+    RateLimiter --> PaymentController
+    RateLimiter --> AdminController
 
-    AiController --> AiOrchestrator & VeoVideoService
+    AiController --> AiOrchestrator
+    AiController --> VeoVideoService
     PostController --> PublisherService
     SocialController --> SocialService
     PaymentController --> PaymentService
     AdminController --> AdminService
 
     AiOrchestrator --> Gemini
-    VeoVideoService --> Gemini & S3
-    PublisherService --> SocialAPIs & S3
+    VeoVideoService --> Gemini
+    VeoVideoService --> S3
+    PublisherService --> SocialAPIs
+    PublisherService --> S3
     PaymentService --> Razorpay
     
-    Service Layer --> DB
-    Service Layer --> Redis
+    AiOrchestrator --> DB
+    PublisherService --> DB
+    SocialService --> DB
+    PaymentService --> DB
+    AdminService --> DB
+
+    AiOrchestrator --> Redis
+    PublisherService --> Redis
+    SocialService --> Redis
 ```
 
 ---
