@@ -136,6 +136,51 @@ public class SocialController {
         }
     }
 
+    @GetMapping("/connect/youtube")
+    public ResponseEntity<String> connectYouTube() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            throw new RuntimeException("Authenticated user not found");
+        }
+        String stateToken = jwtUtils.generateStateToken(userId);
+        return ResponseEntity.ok(socialService.getYouTubeAuthUrl(stateToken));
+    }
+
+    @GetMapping("/callback/youtube")
+    public void youtubeCallback(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String error,
+            @RequestParam(required = false) String error_description,
+            @RequestParam(required = false) String state,
+            HttpServletResponse response) throws IOException {
+
+        if (error != null) {
+            String redirectUrl = frontendUrl + "/connect?error=" + java.net.URLEncoder.encode(error_description != null ? error_description : error, "UTF-8");
+            response.sendRedirect(redirectUrl);
+            return;
+        }
+
+        if (code == null) {
+            response.sendRedirect(frontendUrl + "/connect?error=Missing+authorization+code");
+            return;
+        }
+
+        try {
+            Long userId = jwtUtils.getUserIdFromStateToken(state);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("User context lost during callback - Invalid userId: " + userId));
+
+            socialService.processYouTubeCallback(code, user);
+
+            String redirectUrl = frontendUrl + "/connect?success=true&platform=youtube";
+            response.sendRedirect(redirectUrl);
+        } catch (Exception e) {
+            log.error("YouTube Callback handling failed", e);
+            String redirectUrl = frontendUrl + "/connect?error=" + java.net.URLEncoder.encode(e.getMessage(), "UTF-8");
+            response.sendRedirect(redirectUrl);
+        }
+    }
+
     @GetMapping("/accounts")
     public ResponseEntity<List<SocialAccount>> getAccounts() {
         User user = SecurityUtils.getCurrentUser()

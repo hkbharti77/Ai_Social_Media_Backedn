@@ -41,6 +41,7 @@ public class EmailTemplateUtils {
             case "FACEBOOK" -> "📘";
             case "LINKEDIN" -> "💼";
             case "X" -> "🐦";
+            case "YOUTUBE" -> "▶️";
             default -> "📱";
         };
     }
@@ -56,6 +57,7 @@ public class EmailTemplateUtils {
             case "FACEBOOK" -> "#1877f2";
             case "LINKEDIN" -> "#0a66c2";
             case "X" -> "#1da1f2";
+            case "YOUTUBE" -> "#ff0000";
             default -> "#e2e8f0";
         };
     }

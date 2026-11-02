@@ -93,6 +93,15 @@ public class SocialService {
     @Value("${x.default.user-id:}")
     private String xDefaultUserId;
 
+    @Value("${youtube.client.id:}")
+    private String youtubeClientId;
+
+    @Value("${youtube.client.secret:}")
+    private String youtubeClientSecret;
+
+    @Value("${youtube.redirect.uri:}")
+    private String youtubeRedirectUri;
+
     @Value("${app.security.owner-email}")
     private String ownerEmail;
 
@@ -708,5 +717,161 @@ public class SocialService {
         String accountName = account.getAccountName();
         socialAccountRepository.delete(account);
         emailService.sendSocialAccountDisconnectedEmail(user, platform, accountName);
+    }
+
+    public String getYouTubeAuthUrl(String state) {
+        if (youtubeClientId == null || youtubeClientId.isBlank()) {
+            throw new RuntimeException("YouTube Client ID is not configured. Please set YOUTUBE_CLIENT_ID in your .env file.");
+        }
+        String scopes = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly";
+        String encodedScopes = java.net.URLEncoder.encode(scopes, java.nio.charset.StandardCharsets.UTF_8);
+        String encodedRedirect = java.net.URLEncoder.encode(youtubeRedirectUri, java.nio.charset.StandardCharsets.UTF_8);
+        return "https://accounts.google.com/o/oauth2/v2/auth?" +
+                "response_type=code" +
+                "&client_id=" + youtubeClientId +
+                "&redirect_uri=" + encodedRedirect +
+                "&state=" + state +
+                "&scope=" + encodedScopes +
+                "&access_type=offline" +
+                "&prompt=consent";
+    }
+
+    public void processYouTubeCallback(String code, User user) {
+        String tokenUrl = "https://oauth2.googleapis.com/token";
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "authorization_code");
+        body.add("code", code);
+        body.add("client_id", youtubeClientId);
+        body.add("client_secret", youtubeClientSecret);
+        body.add("redirect_uri", youtubeRedirectUri);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tokenResponse = restTemplate.postForObject(tokenUrl, request, Map.class);
+
+        if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
+            throw new RuntimeException("Failed to obtain YouTube access token from Google.");
+        }
+
+        String accessToken = (String) tokenResponse.get("access_token");
+        String refreshToken = (String) tokenResponse.get("refresh_token");
+        Integer expiresIn = (Integer) tokenResponse.getOrDefault("expires_in", 3600);
+
+        try {
+            HttpHeaders channelHeaders = new HttpHeaders();
+            channelHeaders.setBearerAuth(accessToken);
+            HttpEntity<String> channelRequest = new HttpEntity<>(channelHeaders);
+
+            String channelApiUrl = "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true";
+            ResponseEntity<String> channelResponse = restTemplate.exchange(
+                    channelApiUrl,
+                    HttpMethod.GET,
+                    channelRequest,
+                    String.class
+            );
+
+            JsonNode root = objectMapper.readTree(channelResponse.getBody());
+            JsonNode items = root.path("items");
+            if (items.isEmpty()) {
+                throw new RuntimeException("No YouTube channel found for the authenticated Google account.");
+            }
+
+            JsonNode firstChannel = items.get(0);
+            String channelId = firstChannel.path("id").asText();
+            JsonNode snippet = firstChannel.path("snippet");
+            String channelTitle = snippet.path("title").asText("YouTube Channel");
+            String thumbnailUrl = snippet.path("thumbnails").path("default").path("url").asText(null);
+
+            String encryptedAccessToken = encryptionUtils.encrypt(accessToken);
+            String encryptedRefreshToken = (refreshToken != null && !refreshToken.isBlank())
+                    ? encryptionUtils.encrypt(refreshToken)
+                    : null;
+
+            if (encryptedRefreshToken == null) {
+                var existingOpt = socialAccountRepository.findByUserAndPlatformAndPageId(user, "YOUTUBE", channelId);
+                if (existingOpt.isPresent() && existingOpt.get().getEncryptedRefreshToken() != null) {
+                    encryptedRefreshToken = existingOpt.get().getEncryptedRefreshToken();
+                }
+            }
+
+            socialAccountRepository.findByUserAndPlatformAndPageId(user, "YOUTUBE", channelId)
+                    .ifPresent(existing -> socialAccountRepository.delete(existing));
+
+            SocialAccount ytAccount = SocialAccount.builder()
+                    .user(user)
+                    .platform("YOUTUBE")
+                    .pageId(channelId)
+                    .accountName(channelTitle)
+                    .profilePictureUrl(thumbnailUrl)
+                    .encryptedAccessToken(encryptedAccessToken)
+                    .encryptedRefreshToken(encryptedRefreshToken)
+                    .tokenExpiresAt(LocalDateTime.now().plusSeconds(expiresIn))
+                    .build();
+
+            socialAccountRepository.save(ytAccount);
+            logger.info("✅ Saved YOUTUBE account for channelId={} ({})", channelId, channelTitle);
+            emailService.sendSocialAccountConnectedEmail(user, "YOUTUBE", channelTitle);
+
+        } catch (Exception e) {
+            logger.error("❌ Error fetching YouTube channel info: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch YouTube channel details: " + e.getMessage(), e);
+        }
+    }
+
+    public String refreshYouTubeAccessToken(SocialAccount account) {
+        String encryptedRefreshToken = account.getEncryptedRefreshToken();
+        if (encryptedRefreshToken == null || encryptedRefreshToken.isBlank()) {
+            throw new RuntimeException("No refresh token stored for YouTube account: " + account.getAccountName() + ". Please re-link your channel.");
+        }
+
+        String refreshToken;
+        try {
+            refreshToken = encryptionUtils.decrypt(encryptedRefreshToken);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to decrypt YouTube refresh token: " + e.getMessage(), e);
+        }
+
+        String tokenUrl = "https://oauth2.googleapis.com/token";
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "refresh_token");
+        body.add("refresh_token", refreshToken);
+        body.add("client_id", youtubeClientId);
+        body.add("client_secret", youtubeClientSecret);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> tokenResponse = restTemplate.postForObject(tokenUrl, request, Map.class);
+            if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
+                throw new RuntimeException("YouTube token refresh returned empty response.");
+            }
+
+            String newAccessToken = (String) tokenResponse.get("access_token");
+            Integer expiresIn = (Integer) tokenResponse.getOrDefault("expires_in", 3600);
+
+            String newRefreshToken = (String) tokenResponse.get("refresh_token");
+            if (newRefreshToken != null && !newRefreshToken.isBlank()) {
+                account.setEncryptedRefreshToken(encryptionUtils.encrypt(newRefreshToken));
+            }
+
+            account.setEncryptedAccessToken(encryptionUtils.encrypt(newAccessToken));
+            account.setTokenExpiresAt(LocalDateTime.now().plusSeconds(expiresIn));
+            socialAccountRepository.save(account);
+
+            logger.info("✅ [YouTube] Access token refreshed successfully for channel: {}", account.getAccountName());
+            return newAccessToken;
+        } catch (Exception e) {
+            logger.error("❌ [YouTube] Token refresh error: {}", e.getMessage());
+            throw new RuntimeException("YouTube token refresh failed: " + e.getMessage(), e);
+        }
     }
 }

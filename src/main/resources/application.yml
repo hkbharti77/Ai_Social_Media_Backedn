@@ -1,13 +1,22 @@
+server:
+  port: ${PORT:8080}
+
 spring:
   application:
     name: ai-social-media-automation
   profiles:
     active: dev
   datasource:
-    url: jdbc:postgresql://localhost:5432/ai_social_media
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:${DATABASE_URL:${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ai_social_media}}}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
+      minimum-idle: ${DB_MIN_IDLE:2}
+      idle-timeout: 300000
+      max-lifetime: 600000
+      connection-timeout: 20000
   jpa:
     hibernate:
       ddl-auto: validate
@@ -26,8 +35,10 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
+      url: ${REDIS_URL:}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
   mail:
     host: ${SMTP_SERVER:smtp.gmail.com}
@@ -168,3 +179,10 @@ x:
     access-token: ${X_DEFAULT_ACCESS_TOKEN:}
     refresh-token: ${X_DEFAULT_REFRESH_TOKEN:}
     user-id: ${X_DEFAULT_USER_ID:}
+
+youtube:
+  client:
+    id: ${YOUTUBE_CLIENT_ID:}
+    secret: ${YOUTUBE_CLIENT_SECRET:}
+  redirect:
+    uri: ${YOUTUBE_REDIRECT_URI:http://localhost:8080/api/v1/social/callback/youtube}

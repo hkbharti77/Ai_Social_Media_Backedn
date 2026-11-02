@@ -73,6 +73,9 @@ public class PublisherService {
 
     @Autowired
     private RestTemplate restTemplate;
+
+    @Autowired
+    private SocialService socialService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ─────────────────────────────────────────────────
@@ -113,6 +116,7 @@ public class PublisherService {
                 // Match platform: if post is for "ALL", or matches specific platform
                 if (post.getPlatform().equalsIgnoreCase("ALL") || 
                     post.getPlatform().equalsIgnoreCase("BOTH") || // legacy
+                    java.util.Arrays.stream(post.getPlatform().split(",")).map(String::trim).anyMatch(p -> p.equalsIgnoreCase(platform)) ||
                     post.getPlatform().equalsIgnoreCase(platform)) {
                     
                     String token;
@@ -133,7 +137,7 @@ public class PublisherService {
                                 throw new RuntimeException("Facebook Story requires an image. Please add an image to this post.");
                             }
                             publishToFacebookStory(post, account.getPageId(), token);
-                        } else if (Boolean.TRUE.equals(post.getIsReel())) {
+                        } else if (Boolean.TRUE.equals(post.getIsReel()) || (post.getVideoUrl() != null && !post.getVideoUrl().isBlank())) {
                             publishReelToFacebook(post, account.getPageId(), token);
                         } else {
                             publishToFacebook(post, account.getPageId(), token);
@@ -146,7 +150,7 @@ public class PublisherService {
                                 throw new RuntimeException("Instagram Story requires an image. Please add an image to this post.");
                             }
                             publishToInstagramStory(post, account.getIgBusinessAccountId(), token);
-                        } else if (Boolean.TRUE.equals(post.getIsReel())) {
+                        } else if (Boolean.TRUE.equals(post.getIsReel()) || (post.getVideoUrl() != null && !post.getVideoUrl().isBlank())) {
                             publishReelToInstagram(post, account.getIgBusinessAccountId(), token);
                         } else {
                             publishToInstagram(post, account.getIgBusinessAccountId(), token);
@@ -166,10 +170,16 @@ public class PublisherService {
                             publishToX(post, token);
                         }
                         published = true;
+                    } else if (platform.equals("YOUTUBE")) {
+                        if (post.getVideoUrl() != null && !post.getVideoUrl().isBlank()) {
+                            publishToYouTube(post, account);
+                        } else {
+                            logger.info("ℹ️ [Publisher] Skipping YouTube for image-only post (YouTube requires video assets).");
+                        }
+                        published = true;
                     }
                 }
             }
-
             if (published) {
                 post.setStatus(PostStatus.PUBLISHED);
                 post.setPublishedAt(LocalDateTime.now());
@@ -204,6 +214,9 @@ public class PublisherService {
         String fullCaption = post.getCaption();
         if (!hashtags.isEmpty()) {
             fullCaption += "\n\n" + hashtags;
+        }
+        if (post.getVideoUrl() != null && !post.getVideoUrl().isBlank() && !fullCaption.contains(post.getVideoUrl())) {
+            fullCaption += "\n\n" + post.getVideoUrl();
         }
 
         if (Boolean.TRUE.equals(post.getIsCarousel()) && post.getCarouselContent() != null) {
@@ -335,6 +348,12 @@ public class PublisherService {
                 String text = post.getCaption();
                 if (post.getHashtags() != null && !post.getHashtags().isEmpty()) {
                     text += "\n\n" + post.getHashtags();
+                }
+                if (post.getVideoUrl() != null && !post.getVideoUrl().isBlank() && !text.contains(post.getVideoUrl())) {
+                    text += "\n\n" + post.getVideoUrl();
+                }
+                if (text.length() > 280) {
+                    text = text.substring(0, 277) + "...";
                 }
                 body.put("text", text);
 
@@ -517,6 +536,9 @@ public class PublisherService {
         String fullCaption = post.getCaption();
         if (!hashtags.isEmpty()) {
             fullCaption += "\n\n" + hashtags;
+        }
+        if (post.getVideoUrl() != null && !post.getVideoUrl().isBlank() && !fullCaption.contains(post.getVideoUrl())) {
+            fullCaption += "\n\n" + post.getVideoUrl();
         }
 
         if (Boolean.TRUE.equals(post.getIsCarousel()) && post.getCarouselContent() != null) {
@@ -1026,6 +1048,147 @@ public class PublisherService {
             Thread.sleep(ms);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Publishes a video to YouTube using the official Resumable Upload protocol.
+     * Supports both YouTube Shorts (up to 180 seconds, 9:16 or 1:1) and Long-Form videos (16:9).
+     */
+    private void publishToYouTube(Post post, SocialAccount account) {
+        if (post.getVideoUrl() == null || post.getVideoUrl().isBlank()) {
+            throw new RuntimeException("A video URL is required to publish to YouTube.");
+        }
+
+        try {
+            // 1. Resolve / Refresh Access Token
+            String token;
+            if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now().plusMinutes(5))) {
+                token = socialService.refreshYouTubeAccessToken(account);
+            } else {
+                token = encryptionUtils.decrypt(account.getEncryptedAccessToken());
+            }
+            // 2. Classify: Short vs Long-Form
+            // Per YouTube policy: eligible square or vertical (9:16 or 1:1) videos up to 180 seconds qualify as Shorts
+            boolean isShort = Boolean.TRUE.equals(post.getIsReel()) ||
+                    "9:16".equals(post.getSlotType()) ||
+                    "1:1".equals(post.getSlotType()) ||
+                    "SHORT".equalsIgnoreCase(post.getSlotType());
+
+            // 3. Prepare Title (Max 100 characters per YouTube API)
+            String rawTitle = (post.getCaption() != null && !post.getCaption().isBlank())
+                    ? post.getCaption().split("\\n")[0].trim()
+                    : "AI Generated Video";
+
+            if (isShort && !rawTitle.toLowerCase().contains("#shorts")) {
+                if (rawTitle.length() > 90) {
+                    rawTitle = rawTitle.substring(0, 90).trim() + " #Shorts";
+                } else {
+                    rawTitle = rawTitle + " #Shorts";
+                }
+            } else if (rawTitle.length() > 100) {
+                rawTitle = rawTitle.substring(0, 97) + "...";
+            }
+
+            // 4. Prepare Description & Hashtags
+            StringBuilder description = new StringBuilder();
+            if (post.getCaption() != null) {
+                description.append(post.getCaption()).append("\n\n");
+            }
+            if (post.getHashtags() != null && !post.getHashtags().isBlank()) {
+                description.append(post.getHashtags()).append("\n");
+            }
+            if (isShort && !description.toString().toLowerCase().contains("#shorts")) {
+                description.append("#Shorts\n");
+            }
+
+            // 5. Extract Tags
+            List<String> tags = new ArrayList<>();
+            if (post.getHashtags() != null) {
+                for (String tag : post.getHashtags().split("[\\s,]+")) {
+                    String clean = tag.replace("#", "").trim();
+                    if (!clean.isEmpty()) {
+                        tags.add(clean);
+                    }
+                }
+            }
+            if (isShort && !tags.contains("Shorts")) {
+                tags.add("Shorts");
+            }
+
+            // 6. Initiate Resumable Upload Session
+            String initUploadUrl = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
+
+            Map<String, Object> snippetMap = new HashMap<>();
+            snippetMap.put("title", rawTitle);
+            snippetMap.put("description", description.toString());
+            snippetMap.put("tags", tags);
+            snippetMap.put("categoryId", "22"); // People & Blogs
+
+            Map<String, Object> statusMap = new HashMap<>();
+            statusMap.put("privacyStatus", "public");
+            statusMap.put("selfDeclaredMadeForKids", false);
+
+            Map<String, Object> initPayload = new HashMap<>();
+            initPayload.put("snippet", snippetMap);
+            initPayload.put("status", statusMap);
+
+            HttpHeaders initHeaders = new HttpHeaders();
+            initHeaders.setBearerAuth(token);
+            initHeaders.setContentType(MediaType.APPLICATION_JSON);
+            initHeaders.set("X-Upload-Content-Type", "video/mp4");
+
+            HttpEntity<Map<String, Object>> initRequest = new HttpEntity<>(initPayload, initHeaders);
+            ResponseEntity<String> initResponse = restTemplate.postForEntity(initUploadUrl, initRequest, String.class);
+
+            if (!initResponse.getStatusCode().is2xxSuccessful()) {
+                throw new RuntimeException("Failed to initiate YouTube resumable upload session: " + initResponse.getStatusCode());
+            }
+
+            java.net.URI locationUri = initResponse.getHeaders().getLocation();
+            if (locationUri == null) {
+                throw new RuntimeException("YouTube did not return an upload location URI.");
+            }
+
+            logger.info("🎬 [YouTube Upload] Resumable upload session initiated: {}", locationUri);
+
+            // 7. Stream Video Directly from URL/S3 into YouTube using Java 11+ HttpClient
+            java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();
+            java.net.URLConnection conn = new java.net.URL(post.getVideoUrl()).openConnection();
+            long contentLength = conn.getContentLengthLong();
+
+            try (java.io.InputStream videoStream = conn.getInputStream()) {
+                java.net.http.HttpRequest.Builder uploadRequestBuilder = java.net.http.HttpRequest.newBuilder()
+                        .uri(locationUri)
+                        .header("Content-Type", "video/mp4")
+                        .PUT(java.net.http.HttpRequest.BodyPublishers.ofInputStream(() -> videoStream));
+
+                if (contentLength > 0) {
+                    uploadRequestBuilder.header("Content-Length", String.valueOf(contentLength));
+                }
+
+                java.net.http.HttpResponse<String> uploadResponse = httpClient.send(
+                        uploadRequestBuilder.build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString()
+                );
+
+                if (uploadResponse.statusCode() >= 200 && uploadResponse.statusCode() < 300) {
+                    JsonNode respNode = objectMapper.readTree(uploadResponse.body());
+                    String videoId = respNode.path("id").asText();
+                    if (videoId.isEmpty()) {
+                        throw new RuntimeException("YouTube response missing video ID: " + uploadResponse.body());
+                    }
+                    post.setExternalPostId(videoId);
+                    logger.info("✅ [YouTube Upload Success] Published video ID: {} ({})", videoId, isShort ? "Short (up to 180s)" : "Long-Form");
+                } else {
+                    logger.error("❌ [YouTube Upload Failed] Status: {}, Body: {}", uploadResponse.statusCode(), uploadResponse.body());
+                    throw new RuntimeException("YouTube upload failed with status " + uploadResponse.statusCode() + ": " + uploadResponse.body());
+                }
+            }
+
+        } catch (Exception e) {
+            logger.error("❌ [YouTube Publisher] Upload error: {}", e.getMessage(), e);
+            throw new RuntimeException("YouTube publishing failed: " + e.getMessage(), e);
         }
     }
 }
