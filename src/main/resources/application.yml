@@ -108,6 +108,9 @@ mail:
 
 
 app:
+  brand:
+    name: ${PLATFORM_BRAND_NAME:GyanVaniAi}
+    url: ${PLATFORM_BRAND_URL:https://gyanvaniai.com}
   security:
     owner-email: ${OWNER_EMAIL:hkbharti77@gmail.com}
   use-s3: ${USE_S3:true}
