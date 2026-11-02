@@ -40,16 +40,17 @@ spring:
       password: ${REDIS_PASSWORD:}
 
   mail:
-    host: ${SMTP_SERVER:smtp.gmail.com}
+    host: ${SMTP_HOST:${SMTP_SERVER:email-smtp.ap-southeast-2.amazonaws.com}}
     port: ${SMTP_PORT:587}
-    username: ${SMTP_USERNAME}
-    password: ${SMTP_PASSWORD}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
+            required: true
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
@@ -102,8 +103,8 @@ management:
       application: ${spring.application.name}
 
 mail:
-  sender: ${SENDER_EMAIL:ewardmacllum@gmail.com}
-  admin: ${ADMIN_EMAIL:himanshukumar02001@gmail.com}
+  sender: ${SENDER_EMAIL:contact@gyanvaniai.com}
+  admin: ${ADMIN_EMAIL:contact@gyanvaniai.com}
 
 
 app:
