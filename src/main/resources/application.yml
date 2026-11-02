@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: ai-social-media-automation
+    name: gyanvaniai-backend
   profiles:
     active: dev
   datasource:
@@ -117,7 +117,7 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   backend-url: ${BACKEND_URL:http://localhost:8080}
   ffmpeg:
-    path: ${FFMPEG_PATH:D:/ffmpeg/ffmpeg-8.1-essentials_build/bin/ffmpeg.exe}
+    path: ${FFMPEG_PATH:ffmpeg}
   instagram:
     reel:
       skip-transcode: ${INSTAGRAM_REEL_SKIP_TRANSCODE:false}

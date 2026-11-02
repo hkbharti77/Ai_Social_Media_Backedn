@@ -64,7 +64,7 @@ public class PdfService {
             document.add(new Paragraph("Efficiency Analysis", subHeaderFont));
             document.add(new Paragraph("\n"));
             
-            Paragraph desc = new Paragraph("By using VaniAI Studio, you've automated your content workflow. " +
+            Paragraph desc = new Paragraph("By using GyanVaniAi Studio, you've automated your content workflow. " +
                     "Based on industry standards (45 mins per post), you've recovered significant business hours.", normalFont);
             desc.setSpacingAfter(15);
             document.add(desc);
@@ -94,7 +94,7 @@ public class PdfService {
             ls.setLineColor(new Color(226, 232, 240));
             document.add(new Chunk(ls));
             
-            Paragraph footer = new Paragraph("© 2026 VaniAI Studio - Your Partner in AI Growth", mutedFont);
+            Paragraph footer = new Paragraph("© 2026 GyanVaniAi Studio - Your Partner in AI Growth", mutedFont);
             footer.setAlignment(Element.ALIGN_CENTER);
             document.add(footer);
 
@@ -148,7 +148,7 @@ public class PdfService {
 
             // Safe values — guard against nulls
             String userName   = order.getUser() != null && order.getUser().getFullName() != null
-                                ? order.getUser().getFullName() : "VaniAI User";
+                                ? order.getUser().getFullName() : "GyanVaniAi User";
             String userEmail  = order.getUser() != null && order.getUser().getEmail() != null
                                 ? order.getUser().getEmail() : "";
             String orderId    = order.getRazorpayOrderId() != null ? order.getRazorpayOrderId() : "N/A";
@@ -182,7 +182,7 @@ public class PdfService {
             // 1. Header Banner
             PdfPTable headerTable = new PdfPTable(1);
             headerTable.setWidthPercentage(100);
-            PdfPCell bannerCell = new PdfPCell(new Phrase("VANIAI STUDIO", brandFont));
+            PdfPCell bannerCell = new PdfPCell(new Phrase("GYANVANIAI STUDIO", brandFont));
             bannerCell.setBackgroundColor(PRIMARY_PURPLE);
             bannerCell.setPadding(30);
             bannerCell.setBorder(Rectangle.NO_BORDER);
@@ -267,7 +267,7 @@ public class PdfService {
             footer.setSpacingBefore(15f);
             document.add(footer);
 
-            Paragraph support = new Paragraph("Support: support@vaniai.com | Portal: studio.vaniai.com", normalFont);
+            Paragraph support = new Paragraph("Support: contact@gyanvaniai.com | Portal: gyanvaniai.com", normalFont);
             support.setAlignment(Element.ALIGN_CENTER);
             document.add(support);
 

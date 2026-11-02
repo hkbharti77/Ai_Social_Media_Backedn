@@ -42,7 +42,7 @@ public class ReportController {
 
         byte[] pdf = pdfService.generateRoiReport(user, count, hoursSaved, reachGrowth, topPost);
 
-        String filename = "VaniAI_ROI_Report_" + LocalDateTime.now().getMonth() + ".pdf";
+        String filename = "GyanVaniAi_ROI_Report_" + LocalDateTime.now().getMonth() + ".pdf";
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)

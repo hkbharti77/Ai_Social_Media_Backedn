@@ -9,6 +9,10 @@ RUN mvn clean package -DskipTests
 # Run Stage
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
+
+# Install ffmpeg for Instagram Reels and video processing
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Copy the built jar from the builder stage
 COPY --from=builder /app/target/*.jar app.jar
 

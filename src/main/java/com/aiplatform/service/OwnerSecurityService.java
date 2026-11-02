@@ -42,20 +42,29 @@ public class OwnerSecurityService {
 
     /**
      * Ensures the owner account exists on system startup.
+     * Preserves existing password across server restarts (no email sent on restarts).
+     * If the account is provisioned for the first time, sends initial credentials once.
      */
     @Transactional
     public void provisionOwner() {
         Optional<User> ownerOpt = userRepository.findByEmail(ownerEmail);
         if (ownerOpt.isEmpty()) {
             log.info("🛠️ [OwnerSecurity] Provisioning initial Owner account: {}", ownerEmail);
+            String initialPassword = generateRandomPassword();
             User owner = User.builder()
                     .email(ownerEmail)
-                    .fullName("VaniAI Owner")
-                    .password(passwordEncoder.encode(generateRandomPassword())) // Initial random
+                    .fullName("GyanVaniAi Owner")
+                    .password(passwordEncoder.encode(initialPassword))
                     .emailVerified(true)
                     .roles(new HashSet<>(Collections.singletonList("ROLE_ADMIN")))
                     .build();
             userRepository.save(owner);
+            try {
+                sendOwnerPasswordEmail(initialPassword);
+                log.info("📧 [OwnerSecurity] Initial Owner credentials sent to {}", ownerEmail);
+            } catch (Exception e) {
+                log.error("❌ [OwnerSecurity] Failed to send initial owner credentials email: {}", e.getMessage());
+            }
         } else {
             User owner = ownerOpt.get();
             if (!owner.getRoles().contains("ROLE_ADMIN")) {
@@ -64,12 +73,14 @@ public class OwnerSecurityService {
                 owner.setRoles(roles);
                 userRepository.save(owner);
             }
+            log.info("👤 [OwnerSecurity] Owner account verified: {} (password preserved across restarts, no email sent)", ownerEmail);
         }
     }
 
     /**
      * Rotates the owner's password and sends it to their email.
      * Invalidates the old password automatically.
+     * Invoked weekly by SecurityScheduler or manually by OwnerController.
      */
     @Transactional
     public String rotateOwnerPassword() {

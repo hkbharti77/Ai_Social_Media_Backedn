@@ -15,7 +15,7 @@ public class HealthCheckController {
     public ResponseEntity<Map<String, Object>> rootHealth() {
         return ResponseEntity.ok(Map.of(
                 "status", "UP",
-                "service", "AI Social Media Automation Backend"
+                "service", "GyanVaniAi Backend"
         ));
     }
 
