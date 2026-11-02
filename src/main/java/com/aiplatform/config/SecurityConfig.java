@@ -23,8 +23,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import org.springframework.context.annotation.Configuration;
-
 import java.util.Arrays;
 
 @Configuration
@@ -76,6 +74,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                                .requestMatchers("/", "/health", "/actuator/**").permitAll()
                                 .requestMatchers("/api/v1/auth/owner/refresh-access").hasRole("ADMIN")
                                 .requestMatchers("/api/v1/auth/**", "/api/auth/**").permitAll()
                                 .requestMatchers("/api/v1/social/callback/**").permitAll()
