@@ -9,6 +9,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConfiguration;
+import org.springframework.data.redis.connection.RedisPassword;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 
 import java.time.Duration;
 
@@ -28,6 +32,21 @@ public class RedisConfig {
 
     @Value("${spring.data.redis.password:}")
     private String redisPassword;
+
+    @Bean
+    public LettuceConnectionFactory redisConnectionFactory() {
+        RedisConfiguration redisConfiguration;
+        if (redisUrl != null && !redisUrl.trim().isEmpty()) {
+            redisConfiguration = LettuceConnectionFactory.createRedisConfiguration(redisUrl.trim());
+        } else {
+            RedisStandaloneConfiguration standalone = new RedisStandaloneConfiguration(redisHost, redisPort);
+            if (redisPassword != null && !redisPassword.trim().isEmpty()) {
+                standalone.setPassword(RedisPassword.of(redisPassword.trim()));
+            }
+            redisConfiguration = standalone;
+        }
+        return new LettuceConnectionFactory(redisConfiguration);
+    }
 
     @Bean(destroyMethod = "shutdown")
     public RedisClient redisClient() {
